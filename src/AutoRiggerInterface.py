@@ -1,7 +1,6 @@
 '''
-Instructions:
-Keep the icons folder in the same directory as the script for the icons to be displayed in the visualizer widget.
-Position the camera in the scene in the front of the model, to easily work with the visualizer widget. [Optional]
+Disclaimer:
+Currently not using the custom icons, but default locators to represent the markers.
 '''
 
 from PySide2.QtWidgets import *
@@ -570,6 +569,9 @@ class FK:
 
         cmds.delete(cmds.pointConstraint(jName, controller, mo=False))
         cmds.delete(cmds.orientConstraint(jName, controller, mo=False))
+
+        cmds.makeIdentity(controller, apply=True, r=True, s=True, t=True, n=False, pn=True)
+        cmds.delete(controller, ch=True)
 
         cmds.parentConstraint(controller, jName, mo=True)
 
