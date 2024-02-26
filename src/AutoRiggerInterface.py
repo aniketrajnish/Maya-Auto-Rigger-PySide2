@@ -57,7 +57,8 @@ class AutoRiggerGUI(QDialog):
         self.initArmsWidgets()
         self.initSpineWidgets()
         self.initHeadWidgets()
-        self.initRootWidgets()        
+        self.initRootWidgets()             
+        self.initHW7Widgets()   
 
     def initLayout(self):
         '''
@@ -143,63 +144,35 @@ class AutoRiggerGUI(QDialog):
         self.editMarkersLayout = QVBoxLayout()
         self.editMarkersGroupBox.setDisabled(True)
 
+        def createCustomSlider(name, min, max, init, connection):
+            slider = CustomSlider(min, max, name=name)
+            slider.setValue(init)
+            slider.connectValueChanged(connection)
+            self.editMarkersLayout.addWidget(slider)
+            return slider
+
         self.scaleLabel = QLabel('Scale:')
-
-        self.scaleXSlider = CustomSlider(0, 1000, name='X: ')
-        self.scaleYSlider = CustomSlider(0, 1000, name='Y: ')
-        self.scaleZSlider = CustomSlider(0, 1000, name='Z: ')
-
-        self.scaleXSlider.setValue(100)
-        self.scaleYSlider.setValue(100)
-        self.scaleZSlider.setValue(100)
-
-        self.scaleXSlider.connectValueChanged(self.adjustMarkersScale)
-        self.scaleYSlider.connectValueChanged(self.adjustMarkersScale)
-        self.scaleZSlider.connectValueChanged(self.adjustMarkersScale)
-
         self.editMarkersLayout.addWidget(self.scaleLabel)
-        self.editMarkersLayout.addWidget(self.scaleXSlider)
-        self.editMarkersLayout.addWidget(self.scaleYSlider)
-        self.editMarkersLayout.addWidget(self.scaleZSlider)
+
+        self.scaleXSlider = createCustomSlider('X: ', 0, 1000, 100, self.adjustMarkersScale)
+        self.scaleYSlider = createCustomSlider('Y: ', 0, 1000, 100, self.adjustMarkersScale)
+        self.scaleZSlider = createCustomSlider('Z: ', 0, 1000, 100, self.adjustMarkersScale)
 
         self.offsetLabel = QLabel('Offset:')
-
-        self.offsetXSlider = CustomSlider(-1000, 1000, name='X: ')
-        self.offsetYSlider = CustomSlider(-1000, 1000, name='Y: ')
-        self.offsetZSlider = CustomSlider(-1000, 1000, name='Z: ')
-
-        self.offsetXSlider.connectValueChanged(self.adjustMarkersOffset)
-        self.offsetYSlider.connectValueChanged(self.adjustMarkersOffset)
-        self.offsetZSlider.connectValueChanged(self.adjustMarkersOffset)
-
-        self.offsetXSlider.setValue(0)
-        self.offsetYSlider.setValue(0)
-        self.offsetZSlider.setValue(0)  
-
         self.editMarkersLayout.addWidget(self.offsetLabel)
-        self.editMarkersLayout.addWidget(self.offsetXSlider)
-        self.editMarkersLayout.addWidget(self.offsetYSlider)
-        self.editMarkersLayout.addWidget(self.offsetZSlider)   
+
+        self.offsetXSlider = createCustomSlider('X: ', -1000, 1000, 0, self.adjustMarkersOffset)
+        self.offsetYSlider = createCustomSlider('Y: ', -1000, 1000, 0, self.adjustMarkersOffset)
+        self.offsetZSlider = createCustomSlider('Z: ', -1000, 1000, 0, self.adjustMarkersOffset)
+
 
         self.rotationLabel = QLabel('Rotation:')
-
-        self.rotXSlider = CustomSlider(0,360, name='X: ')
-        self.rotYSlider = CustomSlider(0,360, name='Y: ')
-        self.rotZSlider = CustomSlider(0,360, name='Z: ')
-
-        self.rotXSlider.connectValueChanged(self.adjustMarkersRotation)
-        self.rotYSlider.connectValueChanged(self.adjustMarkersRotation)
-        self.rotZSlider.connectValueChanged(self.adjustMarkersRotation)
-
-        self.rotXSlider.setValue(0)
-        self.rotYSlider.setValue(0)
-        self.rotZSlider.setValue(0)
-
         self.editMarkersLayout.addWidget(self.rotationLabel)
-        self.editMarkersLayout.addWidget(self.rotXSlider)
-        self.editMarkersLayout.addWidget(self.rotYSlider)
-        self.editMarkersLayout.addWidget(self.rotZSlider)
 
+        self.rotXSlider = createCustomSlider('X: ', 0, 360, 0, self.adjustMarkersRotation)
+        self.rotYSlider = createCustomSlider('Y: ', 0, 360, 0, self.adjustMarkersRotation)
+        self.rotZSlider = createCustomSlider('Z: ', 0, 360, 0, self.adjustMarkersRotation)
+        
         self.mirrorMarkersBtn = QPushButton('Mirror Markers')
         self.mirrorMarkersBtn.clicked.connect(self.onMirrorMarkersBtnClicked)
 
@@ -212,29 +185,63 @@ class AutoRiggerGUI(QDialog):
         '''
         When the create markers button is clicked, the markers are created, the joints tab and Adjust Markers group box is enabled.
         '''
-        self.tabs.setTabEnabled(1, True)
+        modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
+        
+        for panel in modelPanels:
+            cmds.modelEditor(panel, edit=True, displayAppearance='wireframe')
+
         self.editMarkersGroupBox.setEnabled(True)
-        self.createMarkersGroupBox.setDisabled(True)
+        self.createMarkersGroupBox.setDisabled(True)        
 
         if self.halfBodyRadioButton.isChecked():
             markers = Markers.defaultBaseMarkers() + Markers.defaultLeftMarkers()
         else:
             markers = Markers.defaultBaseMarkers() + Markers.defaultLeftMarkers() + Markers.defaultRightMarkers()
             self.mirrorMarkersBtn.setEnabled(False)
+            self.tabs.setTabEnabled(1, True)
 
         self.markers = Markers.createMarkers(markers)
+        self.updateMarkerData()
+
+    def updateMarkerData(self):
+        '''
+        Updates the marker data.
+        '''
+        self.markerData = {} # dictionary to store marker data in the same format of the default markers
+        self.markerNames = cmds.listRelatives(self.markers, children=True)
+
+        for markerName in self.markerNames:
+            self.markerData[markerName] = cmds.xform(markerName, q=True, translation=True)
 
     def onMirrorMarkersBtnClicked(self):
         '''
         When the mirror markers button is clicked, the current markers are mirrored.
         '''
         self.mirrorMarkersBtn.setEnabled(False)
+        self.tabs.setTabEnabled(1, True)
 
-        for marker in cmds.listRelatives(self.markers, children=True):
+        for marker in self.markerNames:
             if marker.endswith('_l'):
                 rightMarker = marker.replace('_l', '_r')
                 cmds.duplicate(marker, n=rightMarker)
-                cmds.setAttr(rightMarker + '.tx', -cmds.getAttr(marker + '.tx'))     
+                cmds.setAttr(rightMarker + '.tx', -cmds.getAttr(marker + '.tx'))  
+        
+        self.updateMarkerData()
+
+    def initHW7Widgets(self):        
+        '''
+        Temporary method to show the HW7 FK rig.
+        '''       
+        self.hw7Button = QPushButton('Show FK Rig for HW7')
+        self.hw7Button.clicked.connect(self.onHW7ButtonClicked)
+
+        self.jointsTabLayout.addWidget(self.hw7Button)
+
+        self.legsGroupBox.setDisabled(True)
+        self.armsGroupBox.setDisabled(True)
+        self.spineGroupBox.setDisabled(True)
+        self.headGroupBox.setDisabled(True)
+        self.rootGroupBox.setDisabled(True)
 
     def initLegsWidgets(self):
         '''
@@ -357,6 +364,22 @@ class AutoRiggerGUI(QDialog):
         self.jointsTabLayout.addWidget(self.rootGroupBox)
 
         # self.optionsLayout.addWidget(self.rootGroupBox)
+
+    def onHW7ButtonClicked(self):
+        '''
+        When the HW7 button is clicked, the HW7 FK rig is shown, this is temporary.
+        '''        
+        
+        self.updateMarkerData()
+        
+        modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
+        
+        for panel in modelPanels:
+            cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded')
+
+        skels = Skeleton.createSkeleton(self.markerData)
+        FK.createFKCharacterControllers(skels[0])
+        
    
     def createSectionLayout(self, radioButtons, checkBoxes, createButton):
         '''
@@ -378,7 +401,7 @@ class AutoRiggerGUI(QDialog):
 
         sectionLayout.addWidget(createButton)
 
-        return sectionLayout
+        return sectionLayout    
     
     def adjustMarkersScale(self):
         '''
@@ -449,6 +472,9 @@ class Visualizer(QLabel):
         self.setPixmap(QPixmap(displayImg))
 
 class CustomSlider(QWidget):
+    '''
+    A class to create a custom slider that I've tried replicating from the Maya cmds UI.
+    '''
     def __init__(self, minimum, maximum, parent=None, name=None):
         super(CustomSlider, self).__init__(parent)
         self.initUI(name, minimum, maximum)
@@ -466,7 +492,7 @@ class CustomSlider(QWidget):
         self.currentValue = QLineEdit(str(minimum), self)
         self.currentValue.setFixedWidth(60)
 
-        self.currentValue.setValidator(QDoubleValidator(minimum, 99999, 2))
+        self.currentValue.setValidator(QDoubleValidator(minimum, 99999, 2)) # why don't they allow for float(inf) as max value? :/
         
         self.slider.valueChanged.connect(self.updateCurrentValue)
         self.currentValue.textChanged.connect(self.updateSliderValue)
@@ -533,6 +559,98 @@ class DraggableIcon(QLabel):
         '''
         self.dragging = False # stop dragging
 
+class FK:
+    @staticmethod
+    def createFKController(jName, pName = None):
+        ''' 
+        FK controller creation. 
+        '''
+        ctrlName = "ctrl_" + jName
+        controller = cmds.circle(n=ctrlName, nr=(1, 0, 0), c=(0, 0, 0), r=20)[0]
+
+        cmds.delete(cmds.pointConstraint(jName, controller, mo=False))
+        cmds.delete(cmds.orientConstraint(jName, controller, mo=False))
+
+        cmds.parentConstraint(controller, jName, mo=True)
+
+        if pName:
+            pController = "ctrl_" + pName
+            cmds.parent(controller, pController)
+
+        return controller
+    
+    @staticmethod
+    def createFKCharacterControllers(rootJoint = None, parent = None):
+        '''
+        Recursevly traverse the character skeleton and creates a default controller at every joint.
+        '''  
+        controller = FK.createFKController(rootJoint, parent)   
+
+        kids = cmds.listRelatives(rootJoint, c=True, type='joint')
+
+        if kids:
+            for kid in kids:
+                FK.createFKCharacterControllers(kid, rootJoint)
+
+        return controller
+
+class Skeleton:
+    @staticmethod
+    def createJoint(jName = '', jParent = None, jPos = (0,0,0)):
+        '''
+        Creates a joint with the given name, parent, and position.
+        '''
+        cmds.select(clear=True)
+
+        j = cmds.joint(n=jName, p=jPos)
+
+        if jParent:
+            cmds.parent(j, jParent)
+            cmds.joint(jParent, e=True, zso=True, oj='xyz', sao='yup')
+
+        cmds.select(j, r=True)
+            
+        return j
+    
+    @staticmethod
+    def createJointFromMarker(markerName, markerData, jParent=None):
+        '''Creates a joint from the given marker.'''
+        pos = markerData[markerName]
+        cmds.delete(markerName)
+        return Skeleton.createJoint(jName=markerName, jParent=jParent, jPos=pos)
+    
+    @staticmethod
+    def createJointChainFromMarkers(markerNames, markerData, jParent=None):
+        '''Creates a joint chain from the given markers.'''
+        parent = jParent
+        chain = []
+
+        for markerName in markerNames:
+            newJoint = Skeleton.createJointFromMarker(markerName, markerData, jParent=parent)
+            parent = newJoint
+            chain.append(newJoint)
+
+        return chain
+    
+    @staticmethod
+    def createSkeleton(markerData):
+        '''Creates the skeleton from the given markers.'''
+        baseMarkers = [marker[0] for marker in Markers.defaultBaseMarkers()]
+        leftSideMarkers = [marker[0] for marker in Markers.defaultLeftMarkers()]
+        rightSideMarkers = [marker[0] for marker in Markers.defaultRightMarkers()]
+
+        rootJ = Skeleton.createJointFromMarker('root', markerData)
+        pelvisJ = Skeleton.createJointFromMarker('pelvis', markerData, jParent=rootJ)
+
+        spineJs = Skeleton.createJointChainFromMarkers(baseMarkers[2:], markerData, jParent=pelvisJ)
+        leftArmJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[:4], markerData, jParent=spineJs[2])
+        rightArmJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[:4], markerData, jParent=spineJs[2])
+        leftLegJoints = Skeleton.createJointChainFromMarkers(leftSideMarkers[4:], markerData, jParent=pelvisJ)
+        rightLegJoints = Skeleton.createJointChainFromMarkers(rightSideMarkers[4:], markerData, jParent=pelvisJ)
+
+        return rootJ, pelvisJ, spineJs, leftArmJs, rightArmJs, leftLegJoints, rightLegJoints
+
+
 class Markers:
     '''
     Static class that contains helper methods that are used in the auto rigging process.
@@ -582,7 +700,10 @@ class Markers:
         for marker in markers:
             loc = cmds.spaceLocator(n=marker[0])[0]  # cmds.spaceLocator returns a list, take the first item
             cmds.move(marker[1][0], marker[1][1], marker[1][2], loc)  # Position the locator
-            locators.append(loc)
+
+            cmds.setAttr(loc + '.localScale', 5, 5, 5, type='double3')    
+
+            locators.append(loc)        
 
         group = cmds.group(locators, name="MarkersGrp")
         cmds.xform(group, pivots=(0, 0, 0), worldSpace=True)
