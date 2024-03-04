@@ -141,7 +141,7 @@ class AutoRiggerGUI(QDialog):
         '''
         self.editMarkersGroupBox = QGroupBox('Global Markers Adjustment')  
         self.editMarkersLayout = QVBoxLayout()
-        self.editMarkersGroupBox.setDisabled(True)
+        self.editMarkersGroupBox.setDisabled(True) # every part of the rig creation process is divided into group boxes, and they are disabled until the previous step is completed to avoid errors
 
         def createCustomSlider(name, min, max, init, connection):
             slider = CustomSlider(min, max, name=name)
@@ -187,7 +187,7 @@ class AutoRiggerGUI(QDialog):
         modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
         
         for panel in modelPanels:
-            cmds.modelEditor(panel, edit=True, displayAppearance='wireframe')
+            cmds.modelEditor(panel, edit=True, displayAppearance='wireframe') # change the display of the model panel to wireframe to make it easier to see the markers
 
         self.editMarkersGroupBox.setEnabled(True)
         self.createMarkersGroupBox.setDisabled(True)        
@@ -200,7 +200,7 @@ class AutoRiggerGUI(QDialog):
             self.tabs.setTabEnabled(1, True)
 
         self.markers = Markers.createMarkers(markers)
-        self.updateMarkerData()
+        self.updateMarkerData() # update marker data after creating the markers
 
     def updateMarkerData(self):
         '''
@@ -245,7 +245,7 @@ class AutoRiggerGUI(QDialog):
         modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
         
         for panel in modelPanels:
-            cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded')
+            cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded') # change the display of the model panel back to smooth shaded
 
         self.skeleton = Skeleton.createSkeleton(self.markerData)
         cmds.delete(self.markers)
@@ -535,7 +535,7 @@ class AutoRiggerGUI(QDialog):
         cmds.parent(self.rootControls[0] + '_parent', parentGrp)
         cmds.parent(self.skeleton[0], parentGrp)
         
-        for side in ['_l', '_r']:
+        for side in ['_l', '_r']: # send the ik controls in the controllers group
             cmds.parent('leg_ik' + side, self.rootControls[0] + '_parent')
             cmds.parent('arm_ik' + side, self.rootControls[0] + '_parent')
     
@@ -767,6 +767,9 @@ class IK:
         return controller
 
 class FK:
+    '''
+    Static class that allows for the creation of the FK controllers.
+    '''
     @staticmethod
     def createFKController(jName, pName = None, controllerRadius = 20):
         ''' 
@@ -813,6 +816,9 @@ class FK:
         return controllers
 
 class Skeleton:
+    '''
+    Static class that allows for the creation of the skeleton from the markers.
+    '''
     @staticmethod
     def createJoint(jName = '', jParent = None, jPos = (0,0,0)):
         '''
@@ -832,14 +838,18 @@ class Skeleton:
     
     @staticmethod
     def createJointFromMarker(markerName, markerData, jParent=None):
-        '''Creates a joint from the given marker.'''
+        '''
+        Creates a joint between specified marker.
+        '''
         pos = markerData[markerName]
         cmds.delete(markerName)
         return Skeleton.createJoint(jName=markerName, jParent=jParent, jPos=pos)
     
     @staticmethod
     def createJointChainFromMarkers(markerNames, markerData, jParent=None):
-        '''Creates a joint chain from the given markers.'''
+        '''
+        Creates a joint chain between the specified markers.
+        '''
         parent = jParent
         chain = []
 
@@ -852,29 +862,30 @@ class Skeleton:
     
     @staticmethod
     def createSkeleton(markerData):
-        '''Creates the skeleton from the given markers.'''
+        '''
+        Creates the skeleton from the given markers.
+        '''
         baseMarkers = [marker[0] for marker in Markers.defaultBaseMarkers()]
         leftSideMarkers = [marker[0] for marker in Markers.defaultLeftMarkers()]
         rightSideMarkers = [marker[0] for marker in Markers.defaultRightMarkers()]
 
-        rootJ = Skeleton.createJointFromMarker('root', markerData)
+        rootJ = Skeleton.createJointFromMarker('root', markerData) # base joints
         pelvisJ = Skeleton.createJointFromMarker('pelvis', markerData, jParent=rootJ)
         spineJs = Skeleton.createJointChainFromMarkers(baseMarkers[2:], markerData, jParent=pelvisJ)
 
-        leftArmJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[:4], markerData, jParent=spineJs[2])
+        leftArmJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[:4], markerData, jParent=spineJs[2]) # left joints
         leftThumbJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[4:7], markerData, jParent=leftArmJs[-1])
         leftIndexJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[7:10], markerData, jParent=leftArmJs[-1])
         leftMiddleJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[10:13], markerData, jParent=leftArmJs[-1])
         leftLegJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[13:], markerData, jParent=pelvisJ)
 
-        rightArmJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[:4], markerData, jParent=spineJs[2])
+        rightArmJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[:4], markerData, jParent=spineJs[2]) # right joints
         rightThumbJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[4:7], markerData, jParent=rightArmJs[-1])
         rightIndexJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[7:10], markerData, jParent=rightArmJs[-1])
         rightMiddleJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[10:13], markerData, jParent=rightArmJs[-1])
         rightLegJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[13:], markerData, jParent=pelvisJ)
 
         return rootJ, pelvisJ, spineJs, leftArmJs, leftThumbJs, leftIndexJs, leftMiddleJs, leftLegJs, rightArmJs, rightThumbJs, rightIndexJs, rightMiddleJs, rightLegJs
-
 
 class Markers:
     '''
