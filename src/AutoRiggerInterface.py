@@ -1,6 +1,6 @@
 '''
-Disclaimer:
-Currently not using the custom icons, but default locators to represent the markers.
+Click on IK button to create IK handles and controllers for the legs and arms.
+Legs one is most likely incorrect, but the arms one is similar to class example.
 '''
 
 from PySide2.QtWidgets import *
@@ -52,12 +52,12 @@ class AutoRiggerGUI(QDialog):
         # self.initVisualizer()
         self.initCreateMarkersWidgets()
         self.initAdjustMarkersWidgets()
-        self.initLegsWidgets()
-        self.initArmsWidgets()
+        self.initCreateSkeletonWidgets()
+        self.initRootWidgets()
         self.initSpineWidgets()
         self.initHeadWidgets()
-        self.initRootWidgets()             
-        self.initHW7Widgets()   
+        self.initArmsWidgets()
+        self.initLegsWidgets()
 
     def initLayout(self):
         '''
@@ -227,6 +227,31 @@ class AutoRiggerGUI(QDialog):
         
         self.updateMarkerData()
 
+    def initCreateSkeletonWidgets(self):
+        '''
+        Initializes the widgets required to create the skeleton.
+        '''
+        self.createSkeletonBtn = QPushButton('Create Skeleton')
+        self.createSkeletonBtn.clicked.connect(self.onCreateSkeletonBtnClicked)
+
+        self.jointsTabLayout.addWidget(self.createSkeletonBtn)
+
+    def onCreateSkeletonBtnClicked(self):
+        '''
+        When the create skeleton guides button is clicked, the skeleton is created.
+        '''
+        self.updateMarkerData()
+        
+        modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
+        
+        for panel in modelPanels:
+            cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded')
+
+        self.skeleton = Skeleton.createSkeleton(self.markerData)
+        cmds.delete(self.markers)
+
+        self.rootGroupBox.setEnabled(True)
+
     def initHW7Widgets(self):        
         '''
         Temporary method to show the HW7 FK rig.
@@ -236,11 +261,11 @@ class AutoRiggerGUI(QDialog):
 
         self.jointsTabLayout.addWidget(self.hw7Button)
 
-        self.legsGroupBox.setDisabled(True)
-        self.armsGroupBox.setDisabled(True)
-        self.spineGroupBox.setDisabled(True)
-        self.headGroupBox.setDisabled(True)
-        self.rootGroupBox.setDisabled(True)
+        # self.legsGroupBox.setDisabled(True)
+        # self.armsGroupBox.setDisabled(True)
+        # self.spineGroupBox.setDisabled(True)
+        # self.headGroupBox.setDisabled(True)
+        # self.rootGroupBox.setDisabled(True)
 
     def initLegsWidgets(self):
         '''
@@ -258,17 +283,19 @@ class AutoRiggerGUI(QDialog):
         self.legsReverseFootIkCheckbox = QCheckBox('Reverse Foot IK')
         self.legsStretchyCheckbox = QCheckBox('Stretchy')
 
-        self.legsCreateLegsJointsBtn = QPushButton('Create Joints')
+        self.createLegsJointsBtn = QPushButton('Create Controllers')
+        self.createLegsJointsBtn.clicked.connect(self.onCreateLegsControllersBtnClicked)
 
         self.legsGroupBox = QGroupBox('LEGS')
 
         self.legsGroupBox.setLayout(self.createSectionLayout(
             [self.legsIkRadioBtn, self.legsFkRadioBtn, self.legsIkFkRadioBtn],
             [self.legsSpaceSwitchingCheckbox, self.legsReverseFootIkCheckbox, self.legsStretchyCheckbox],
-            self.legsCreateLegsJointsBtn
+            self.createLegsJointsBtn
         ))
 
         self.jointsTabLayout.addWidget(self.legsGroupBox)
+        self.legsGroupBox.setDisabled(True) 
 
         # self.optionsLayout.addWidget(self.legsGroupBox)
 
@@ -286,7 +313,8 @@ class AutoRiggerGUI(QDialog):
         self.armsWristRollCheckbox = QCheckBox('Wrist Roll')
         self.armsStretchyCheckbox = QCheckBox('Stretchy')
 
-        self.createArmsJointsBtn = QPushButton('Create Joints')
+        self.createArmsJointsBtn = QPushButton('Create Controllers')
+        self.createArmsJointsBtn.clicked.connect(self.onCreateArmsControllersBtnClicked)
 
         self.armsGroupBox = QGroupBox('ARMS')
 
@@ -297,6 +325,7 @@ class AutoRiggerGUI(QDialog):
         ))
 
         self.jointsTabLayout.addWidget(self.armsGroupBox)
+        self.armsGroupBox.setDisabled(True)
 
         # self.optionsLayout.addWidget(self.armsGroupBox)
 
@@ -307,7 +336,8 @@ class AutoRiggerGUI(QDialog):
         self.spineSpaceSwitchingCheckbox = QCheckBox('Space Switching')
         self.spineStretchyCheckbox = QCheckBox('Stretchy')
 
-        self.createSpineJointsBtn = QPushButton('Create Joints')
+        self.createSpineJointsBtn = QPushButton('Create Controllers')
+        self.createSpineJointsBtn.clicked.connect(self.onCreateSpineControllersBtnClicked)
 
         self.spineGroupBox = QGroupBox('SPINE')
 
@@ -318,6 +348,7 @@ class AutoRiggerGUI(QDialog):
         ))
 
         self.jointsTabLayout.addWidget(self.spineGroupBox)
+        self.spineGroupBox.setDisabled(True)
 
         # self.optionsLayout.addWidget(self.spineGroupBox)
 
@@ -328,7 +359,8 @@ class AutoRiggerGUI(QDialog):
         self.headSpaceSwitchingCheckbox = QCheckBox('Space Switching')
         self.headStretchyCheckbox = QCheckBox('Stretchy')
 
-        self.createHeadJointsBtn = QPushButton('Create Joints')
+        self.createHeadJointsBtn = QPushButton('Create Controllers')
+        self.createHeadJointsBtn.clicked.connect(self.onCreateHeadControllersBtnClicked)
 
         self.headGroupBox = QGroupBox('HEAD')
 
@@ -339,6 +371,7 @@ class AutoRiggerGUI(QDialog):
         ))
 
         self.jointsTabLayout.addWidget(self.headGroupBox)
+        self.headGroupBox.setDisabled(True)
 
         # self.optionsLayout.addWidget(self.headGroupBox)
 
@@ -350,7 +383,8 @@ class AutoRiggerGUI(QDialog):
         self.rootStretchyCheckbox = QCheckBox('Stretchy')
         self.rootUniformScaleCheckbox = QCheckBox('Uniform Scale')
 
-        self.createRootJointsBtn = QPushButton('Create Joints')
+        self.createRootJointsBtn = QPushButton('Create Controllers')
+        self.createRootJointsBtn.clicked.connect(self.onCreateRootControllersBtnClicked)
 
         self.rootGroupBox = QGroupBox('ROOT')
 
@@ -361,14 +395,87 @@ class AutoRiggerGUI(QDialog):
         ))
 
         self.jointsTabLayout.addWidget(self.rootGroupBox)
+        self.rootGroupBox.setDisabled(True)
 
         # self.optionsLayout.addWidget(self.rootGroupBox)
+
+    def onCreateLegsControllersBtnClicked(self):
+        '''
+        When the create legs controllers button is clicked, the legs controllers are created.
+        '''
+        if self.legsFkRadioBtn.isChecked(): # FK
+            self.leftLegControls = FK.createFKCharacterControllers('thigh_l', controllerRadius=13)
+            self.rightLegControls = FK.createFKCharacterControllers('thigh_r', controllerRadius=13)
+
+            cmds.parent(self.leftLegControls[0] + '_parent', self.rootControls[-1])
+            cmds.parent(self.rightLegControls[0] + '_parent', self.rootControls[-1])
+
+        elif self.legsIkRadioBtn.isChecked(): # IK
+            for side in ['_l', '_r']:
+                IK.createStartJointController('thigh' + side, self.rootControls[1], 'thigh' + side, name = 'thigh' + side, controllerRadius=15)
+                handle, effector = IK.createIKHandle('thigh' + side, 'ball' + side, 'leg_ik' + side)
+                IK.createIKController(handle, 'ball' + side, self.rootControls[0] + '_parent', name = 'leg' + side, controllerRadius=8)
+                IK.createPoleVectorConstraint(handle, self.rootControls[0] + '_parent', 'knee' + side, name = 'pv_leg_' + side, controllerRadius=15)   
+
+        self.legsGroupBox.setDisabled(True)
+        self.cleanup() # organize the rig in the outliner
+
+    def onCreateArmsControllersBtnClicked(self):
+        '''
+        When the create arms controllers button is clicked, the arms controllers are created.
+        '''
+        if self.armsFkRadioBtn.isChecked(): # FK
+            self.leftArmControls = FK.createFKCharacterControllers('clavicle_l', controllerRadius=8)
+            self.rightArmControls = FK.createFKCharacterControllers('clavicle_r', controllerRadius=8)
+
+            cmds.parent(self.leftArmControls[0] + '_parent', self.spineControls[-1])
+            cmds.parent(self.rightArmControls[0] + '_parent', self.spineControls[-1])
+        
+        elif self.armsIkRadioBtn.isChecked(): # IK
+            for side in ['_l', '_r']:
+                IK.createStartJointController('clavicle' + side, self.spineControls[-1], 'upperArm' + side, name = 'clavicle' + side, controllerRadius=12)
+                handle, effector = IK.createIKHandle('upperArm' + side, 'hand' + side,'arm_ik' + side)
+                IK.createIKController(handle,'hand' + side, self.rootControls[0] + '_parent', name = 'arm' + side, controllerRadius=8)
+                IK.createPoleVectorConstraint(handle, self.rootControls[0] + '_parent', 'lowerArm' + side, name = 'pv_arm_' + side, controllerRadius=8)
+                
+        self.armsGroupBox.setDisabled(True)
+        self.legsGroupBox.setEnabled(True)
+
+    def onCreateSpineControllersBtnClicked(self):
+        '''
+        When the create spine controllers button is clicked, the spine controllers are created.
+        '''
+        self.spineControls = FK.createFKCharacterControllers(rootJoint='spine1', endJoint='spine3')
+
+        cmds.parent(self.spineControls[0] + '_parent', self.rootControls[-1])
+
+        self.spineGroupBox.setDisabled(True)
+        self.headGroupBox.setEnabled(True)
+
+    def onCreateHeadControllersBtnClicked(self):
+        '''
+        When the create head controllers button is clicked, the head controllers are created.
+        '''
+        self.headControls = FK.createFKCharacterControllers('neck', controllerRadius=10)
+
+        cmds.parent(self.headControls[0] + '_parent', self.spineControls[-1])
+
+        self.headGroupBox.setDisabled(True)
+        self.armsGroupBox.setEnabled(True)
+
+    def onCreateRootControllersBtnClicked(self):
+        '''
+        When the create root controllers button is clicked, the root controllers are created.
+        '''
+        self.rootControls = FK.createFKCharacterControllers(rootJoint='root', endJoint='pelvis')
+
+        self.rootGroupBox.setDisabled(True)
+        self.spineGroupBox.setEnabled(True)
 
     def onHW7ButtonClicked(self):
         '''
         When the HW7 button is clicked, the HW7 FK rig is shown, this is temporary.
-        '''        
-        
+        '''                
         self.updateMarkerData()
         
         modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
@@ -377,8 +484,8 @@ class AutoRiggerGUI(QDialog):
             cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded')
 
         skels = Skeleton.createSkeleton(self.markerData)
-        FK.createFKCharacterControllers(skels[0])
-        
+        cmds.delete(self.markers)
+        FK.createFKCharacterControllers(skels[0])        
    
     def createSectionLayout(self, radioButtons, checkBoxes, createButton):
         '''
@@ -419,6 +526,18 @@ class AutoRiggerGUI(QDialog):
         Adjusts the rotation of the markers for the skeleton guides.
         '''
         cmds.xform(self.markers, rotation=(float(self.rotXSlider.value()), float(self.rotYSlider.value()), float(self.rotZSlider.value())))
+
+    def cleanup(self):
+        '''
+        Organizes the rig in the outliner.
+        '''
+        parentGrp = cmds.group(em=True, n='rig')
+        cmds.parent(self.rootControls[0] + '_parent', parentGrp)
+        cmds.parent(self.skeleton[0], parentGrp)
+        
+        for side in ['_l', '_r']:
+            cmds.parent('leg_ik' + side, self.rootControls[0] + '_parent')
+            cmds.parent('arm_ik' + side, self.rootControls[0] + '_parent')
     
 class Visualizer(QLabel):
     '''
@@ -475,10 +594,16 @@ class CustomSlider(QWidget):
     A class to create a custom slider that I've tried replicating from the Maya cmds UI.
     '''
     def __init__(self, minimum, maximum, parent=None, name=None):
+        '''
+        Initializes the custom slider and sets the range, value.
+        '''
         super(CustomSlider, self).__init__(parent)
         self.initUI(name, minimum, maximum)
 
     def initUI(self, name, minimum, maximum):
+        '''
+        Create the custom slider using PyQt's GUI classes, make it look like the Maya cmds slider.
+        '''
         if name is not None:
             self.nameLabel = QLabel(name, self)
 
@@ -507,19 +632,34 @@ class CustomSlider(QWidget):
         self.setLayout(layout)
 
     def updateCurrentValue(self, value):
+        '''
+        Updates the text field with the current value of the slider.
+        '''
         self.currentValue.setText(str(value))
     
     def updateSliderValue(self):
+        '''
+        Updates the slider with the current value of the text field.
+        '''
         value = int(float(self.currentValue.text()))
         self.slider.setValue(int(value))
     
     def setValue(self, value):
+        '''
+        Sets the value of the slider.
+        '''
         self.slider.setValue(value)
     
     def value(self):
+        '''
+        Returns current value.
+        '''
         return self.slider.value()
     
     def connectValueChanged(self, func):
+        '''
+        Connects the valueChanged signal to a delegate function.
+        '''
         self.slider.valueChanged.connect(func)
         self.currentValue.textChanged.connect(func)
 
@@ -558,43 +698,119 @@ class DraggableIcon(QLabel):
         '''
         self.dragging = False # stop dragging
 
-class FK:
+class IK:
+    '''
+    Tried replicating the IK class from the class example, hopefully it works.
+    '''
     @staticmethod
-    def createFKController(jName, pName = None):
-        ''' 
-        FK controller creation. 
+    def createIKHandle(startJoint, endEffector, name = ''):
         '''
-        ctrlName = "ctrl_" + jName
-        controller = cmds.circle(n=ctrlName, nr=(1, 0, 0), c=(0, 0, 0), r=20)[0]
+        Creates an IK handle between the start joint and the end effector.
+        '''
+        handle, effector = cmds.ikHandle(sj=startJoint, ee=endEffector, n=name, sol='ikRPsolver')
+        return handle, effector
+    
+    @staticmethod
+    def createPoleVectorConstraint(ikHandle, parent, joint, name = '', controllerRadius = 20):
+        '''
+        Creates a pole vector constraint between the pole vector and the IK handle.
+        '''
+        poleVector = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
 
-        cmds.delete(cmds.pointConstraint(jName, controller, mo=False))
-        cmds.delete(cmds.orientConstraint(jName, controller, mo=False))
+        cmds.pointConstraint(joint, poleVector)
+        cmds.delete(poleVector, cn=True)
 
+        cmds.poleVectorConstraint(poleVector, ikHandle)
+        cmds.parent(poleVector, parent)
+
+        return poleVector
+    
+    @staticmethod
+    def createStartJointController(joint, parent, child, name = '', controllerRadius = 20):
+        '''
+        Creates a controller for the start joint of the IK handle.
+        '''
+        controller = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
+
+        cmds.pointConstraint(child, controller)
+        cmds.delete(controller, cn=True)
+
+        cmds.parent(controller, parent)
         cmds.makeIdentity(controller, apply=True, r=True, s=True, t=True, n=False, pn=True)
         cmds.delete(controller, ch=True)
 
-        cmds.parentConstraint(controller, jName, mo=True)
-
-        if pName:
-            pController = "ctrl_" + pName
-            cmds.parent(controller, pController)
+        cmds.aimConstraint(controller, joint, mo=True, wut='None')
+        Helpers.lockAndHide(controller, ['rx', 'ry', 'rz', 'sx', 'sy', 'sz'])
 
         return controller
     
     @staticmethod
-    def createFKCharacterControllers(rootJoint = None, parent = None):
+    def createIKController(ikHandle, joint, parent, name = '', controllerRadius = 20):
+        '''
+        Creates an IK control for the IK handle.
+        '''
+        controller = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
+
+        ctrlParent = cmds.group(em=True, n='ctrl_' + name + '_parent')
+        cmds.parent(controller, ctrlParent)
+
+        cmds.pointConstraint(joint, ctrlParent, mo=False)
+        cmds.orientConstraint(joint, ctrlParent, mo=False)
+
+        cmds.delete(ctrlParent, cn=True)
+        cmds.makeIdentity(controller, apply=True, r=True, s=True, t=True, n=False, pn=True)
+        
+        cmds.pointConstraint(controller, ikHandle, mo=True)
+        cmds.orientConstraint(controller, joint, mo=True)
+        cmds.parent(ctrlParent, parent)
+
+        return controller
+
+class FK:
+    @staticmethod
+    def createFKController(jName, pName = None, controllerRadius = 20):
+        ''' 
+        FK controller creation. 
+        '''
+        controller = cmds.circle(n='ctrl_' + jName, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
+        
+        ctrlParent = cmds.group(em=True, n='ctrl_' + jName + '_parent')
+        cmds.parent(controller, ctrlParent)
+
+        cmds.pointConstraint(jName, ctrlParent, mo=False)
+        cmds.orientConstraint(jName, ctrlParent, mo=False)
+
+        cmds.delete(ctrlParent, cn=True)
+        cmds.makeIdentity(controller, apply=True, r=True, s=True, t=True, n=False, pn=True)
+
+        cmds.parentConstraint(controller, jName, mo=True)
+
+        if pName:
+            pController = 'ctrl_' + pName
+            cmds.parent(ctrlParent, pController)
+
+        return controller
+    
+    @staticmethod
+    def createFKCharacterControllers(rootJoint = None, parent = None, endJoint = None, controllerRadius = 20):
         '''
         Recursevly traverse the character skeleton and creates a default controller at every joint.
         '''  
-        controller = FK.createFKController(rootJoint, parent)   
+        controllers = []
+        controller = FK.createFKController(rootJoint, parent, controllerRadius)   
+        controllers.append(controller)
+
+        if endJoint is not None:        
+            if rootJoint == endJoint:
+                return controllers
 
         kids = cmds.listRelatives(rootJoint, c=True, type='joint')
 
         if kids:
             for kid in kids:
-                FK.createFKCharacterControllers(kid, rootJoint)
+               controllers.extend(FK.createFKCharacterControllers(kid, rootJoint, endJoint, controllerRadius))
 
-        return controller
+        return controllers
 
 class Skeleton:
     @staticmethod
@@ -643,14 +859,21 @@ class Skeleton:
 
         rootJ = Skeleton.createJointFromMarker('root', markerData)
         pelvisJ = Skeleton.createJointFromMarker('pelvis', markerData, jParent=rootJ)
-
         spineJs = Skeleton.createJointChainFromMarkers(baseMarkers[2:], markerData, jParent=pelvisJ)
-        leftArmJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[:4], markerData, jParent=spineJs[2])
-        rightArmJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[:4], markerData, jParent=spineJs[2])
-        leftLegJoints = Skeleton.createJointChainFromMarkers(leftSideMarkers[4:], markerData, jParent=pelvisJ)
-        rightLegJoints = Skeleton.createJointChainFromMarkers(rightSideMarkers[4:], markerData, jParent=pelvisJ)
 
-        return rootJ, pelvisJ, spineJs, leftArmJs, rightArmJs, leftLegJoints, rightLegJoints
+        leftArmJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[:4], markerData, jParent=spineJs[2])
+        leftThumbJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[4:7], markerData, jParent=leftArmJs[-1])
+        leftIndexJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[7:10], markerData, jParent=leftArmJs[-1])
+        leftMiddleJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[10:13], markerData, jParent=leftArmJs[-1])
+        leftLegJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[13:], markerData, jParent=pelvisJ)
+
+        rightArmJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[:4], markerData, jParent=spineJs[2])
+        rightThumbJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[4:7], markerData, jParent=rightArmJs[-1])
+        rightIndexJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[7:10], markerData, jParent=rightArmJs[-1])
+        rightMiddleJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[10:13], markerData, jParent=rightArmJs[-1])
+        rightLegJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[13:], markerData, jParent=pelvisJ)
+
+        return rootJ, pelvisJ, spineJs, leftArmJs, leftThumbJs, leftIndexJs, leftMiddleJs, leftLegJs, rightArmJs, rightThumbJs, rightIndexJs, rightMiddleJs, rightLegJs
 
 
 class Markers:
@@ -663,9 +886,9 @@ class Markers:
         Returns the base markers for the skeleton guides.
         '''
         return [
-            ('root', (0, 0, 0)), ('pelvis', (0, 105, 0)), ('spine1', (0, 125, 5)),
-            ('spine2', (0, 138, 2.5)), ('spine3', (0, 150, -4.5)), ('neck', (0, 158.5, -3)),
-            ('head', (0, 181.5, 1))
+            ('root', (0, 0, 0)), ('pelvis', (0, 105, 0)), 
+            ('spine1', (0, 125, 5)), ('spine2', (0, 138, 2.5)), ('spine3', (0, 150, -4.5)), 
+            ('neck', (0, 158.5, -3)), ('head', (0, 181.5, 1))
         ]
     
     @staticmethod
@@ -676,6 +899,9 @@ class Markers:
         return [
             ('clavicle_l', (14, 149.5, -4.5)), ('upperArm_l', (23.5, 145.5, -4.5)),
             ('lowerArm_l', (36, 129, -5.5)), ('hand_l', (58.5, 110, 5)),
+            ('thumb1_l', (57, 106, 11.5)), ('thumb2_l', (57, 104.5, 15)), ('thumb3_l', (57.5, 102, 19)),
+            ('index1_l', (64, 103, 12.5)), ('index2_l', (65, 98, 15)), ('index3_l', (64.5, 94.5, 17)),
+            ('middle1_l', (65, 102, 9)), ('middle2_l', (66, 96.5, 11)), ('middle3_l', (62, 92, 12.5)),
             ('thigh_l', (9, 95, 1)), ('knee_l', (14, 55, 0)), ('foot_l', (15.5, 15.5, -6)),
             ('ball_l', (17, 3.5, 5)), ('toe_l', (17, 3.5, 15.5))
         ]
@@ -707,10 +933,30 @@ class Markers:
 
             locators.append(loc)        
 
-        group = cmds.group(locators, name="MarkersGrp")
+        group = cmds.group(locators, name='MarkersGrp')
         cmds.xform(group, pivots=(0, 0, 0), worldSpace=True)
         
         return group
+    
+class Helpers:
+    '''
+    Static class that contains helper methods that are used in the auto rigging process.
+    '''
+    @staticmethod
+    def lockAndHide(node, attributes):
+        '''
+        Locks and hides the given attributes of the given node.
+        '''
+        for attr in attributes:
+            cmds.setAttr(node + '.' + attr, l=True, k=False, cb=False)
+    
+    @staticmethod
+    def unlockAndShow(node, attributes):
+        '''
+        Unlocks and shows the given attributes of the given node.
+        '''
+        for attr in attributes:
+            cmds.setAttr(node + '.' + attr, l = False, k = True, cb = True)
 
 arGUI = AutoRiggerGUI() # Create an instance of the AutoRiggerGUI class and show it
 arGUI.show()
