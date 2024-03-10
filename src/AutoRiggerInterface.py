@@ -49,7 +49,6 @@ class AutoRiggerGUI(QDialog):
         '''
         Initializes the widgets for all the different parts of the body.
         '''
-        # self.initVisualizer()
         self.initCreateMarkersWidgets()
         self.initAdjustMarkersWidgets()
         self.initCreateSkeletonWidgets()
@@ -141,8 +140,8 @@ class AutoRiggerGUI(QDialog):
         '''
         self.editMarkersGroupBox = QGroupBox('Global Markers Adjustment')  
         self.editMarkersLayout = QVBoxLayout()
-        self.editMarkersGroupBox.setDisabled(True) # every part of the rig creation process is divided into group boxes, and they are disabled until the previous step is completed to avoid errors
-
+        self.editMarkersGroupBox.setDisabled(True) # every part of the rig creation process is divided into group boxes, 
+                                                   # and they are disabled until the previous step is completed to avoid errors
         def createCustomSlider(name, min, max, init, connection):
             slider = CustomSlider(min, max, name=name)
             slider.setValue(init)
@@ -252,20 +251,20 @@ class AutoRiggerGUI(QDialog):
 
         self.rootGroupBox.setEnabled(True)
 
-    def initHW7Widgets(self):        
-        '''
-        Temporary method to show the HW7 FK rig.
-        '''       
-        self.hw7Button = QPushButton('Show FK Rig for HW7')
-        self.hw7Button.clicked.connect(self.onHW7ButtonClicked)
+    # def initHW7Widgets(self):        
+    #     '''
+    #     Temporary method to show the HW7 FK rig.
+    #     '''       
+    #     self.hw7Button = QPushButton('Show FK Rig for HW7')
+    #     self.hw7Button.clicked.connect(self.onHW7ButtonClicked)
 
-        self.jointsTabLayout.addWidget(self.hw7Button)
+    #     self.jointsTabLayout.addWidget(self.hw7Button)
 
-        # self.legsGroupBox.setDisabled(True)
-        # self.armsGroupBox.setDisabled(True)
-        # self.spineGroupBox.setDisabled(True)
-        # self.headGroupBox.setDisabled(True)
-        # self.rootGroupBox.setDisabled(True)
+    #     self.legsGroupBox.setDisabled(True)
+    #     self.armsGroupBox.setDisabled(True)
+    #     self.spineGroupBox.setDisabled(True)
+    #     self.headGroupBox.setDisabled(True)
+    #     self.rootGroupBox.setDisabled(True)
 
     def initLegsWidgets(self):
         '''
@@ -413,9 +412,21 @@ class AutoRiggerGUI(QDialog):
         elif self.legsIkRadioBtn.isChecked(): # IK
             for side in ['_l', '_r']:
                 IK.createStartJointController('thigh' + side, self.rootControls[1], 'thigh' + side, name = 'thigh' + side, controllerRadius=15)
-                handle, effector = IK.createIKHandle('thigh' + side, 'ball' + side, 'leg_ik' + side)
+                handle, effector = IK.createIKHandle('thigh' + side, 'foot' + side, 'leg_ik' + side)
                 IK.createIKController(handle, 'ball' + side, self.rootControls[0] + '_parent', name = 'leg' + side, controllerRadius=8)
-                IK.createPoleVectorConstraint(handle, self.rootControls[0] + '_parent', 'knee' + side, name = 'pv_leg_' + side, controllerRadius=15)   
+                IK.createPoleVectorConstraint(handle, self.rootControls[0] + '_parent', 'knee' + side, name = 'pv_leg_' + side, controllerRadius=15)  
+
+            # self.creatFootControllers('ball', 'ctrl_leg')
+
+
+        elif self.legsIkFkRadioBtn.isChecked():
+            for side in ['_l', '_r']:
+                legChain = ['thigh' + side, 'knee' + side, 'foot' + side]
+                FKIK.createFKIKAccessories(legChain, 'leg' + side, controllerRadius=13, 
+                                           fkParent=self.rootControls[1], ikParent=self.rootControls[0] + '_parent', 
+                                           ikStartParent= self.rootControls[1])
+
+            # self.creatFootControllers('ball')
 
         self.legsGroupBox.setDisabled(True)
         self.cleanup() # organize the rig in the outliner
@@ -425,8 +436,8 @@ class AutoRiggerGUI(QDialog):
         When the create arms controllers button is clicked, the arms controllers are created.
         '''
         if self.armsFkRadioBtn.isChecked(): # FK
-            self.leftArmControls = FK.createFKCharacterControllers('clavicle_l', controllerRadius=8)
-            self.rightArmControls = FK.createFKCharacterControllers('clavicle_r', controllerRadius=8)
+            self.leftArmControls = FK.createFKCharacterControllers('clavicle_l',controllerRadius=8)
+            self.rightArmControls = FK.createFKCharacterControllers('clavicle_r',controllerRadius=8)
 
             cmds.parent(self.leftArmControls[0] + '_parent', self.spineControls[-1])
             cmds.parent(self.rightArmControls[0] + '_parent', self.spineControls[-1])
@@ -435,11 +446,44 @@ class AutoRiggerGUI(QDialog):
             for side in ['_l', '_r']:
                 IK.createStartJointController('clavicle' + side, self.spineControls[-1], 'upperArm' + side, name = 'clavicle' + side, controllerRadius=12)
                 handle, effector = IK.createIKHandle('upperArm' + side, 'hand' + side,'arm_ik' + side)
-                IK.createIKController(handle,'hand' + side, self.rootControls[0] + '_parent', name = 'arm' + side, controllerRadius=8)
+                self.ikControl = IK.createIKController(handle,'hand' + side, self.rootControls[0] + '_parent', name = 'arm' + side, controllerRadius=8)
                 IK.createPoleVectorConstraint(handle, self.rootControls[0] + '_parent', 'lowerArm' + side, name = 'pv_arm_' + side, controllerRadius=8)
                 
+            # self.createFingerControllers('thumb', 'ctrl_arm')
+            # self.createFingerControllers('index', 'ctrl_arm')
+            # self.createFingerControllers('middle', 'ctrl_arm')
+
+        elif self.armsIkFkRadioBtn.isChecked(): # IK/FK
+            for side in ['_l', '_r']:
+                armChain = ['clavicle' + side, 'upperArm' + side, 'lowerArm' + side, 'hand' + side]
+                FKIK.createFKIKAccessories(armChain, 'arm' + side, controllerRadius=8, 
+                                           fkParent=self.spineControls[-1], ikParent=self.rootControls[0] + '_parent', 
+                                           ikStartParent= self.spineControls[-1], ikOffset=1)
+
+            # self.createFingerControllers('thumb')
+            # self.createFingerControllers('index')
+            # self.createFingerControllers('middle')    
+
+
         self.armsGroupBox.setDisabled(True)
         self.legsGroupBox.setEnabled(True)
+
+    def creatFootControllers(self, foot, parent = None):
+        '''
+        Creates the foot controllers.
+        '''
+        for side in ['_l', '_r']:
+            footControls = FK.createFKCharacterControllers(rootJoint = foot + side, controllerRadius=8)
+            cmds.parent(footControls[0] + '_parent', parent + side + '_parent')
+
+    def createFingerControllers(self, finger, parent = None):
+        '''
+        Creates the finger controllers.
+        '''
+        for side in ['_l', '_r']:
+            fingerControls = FK.createFKCharacterControllers(rootJoint = finger + '1' + side, endJoint = finger + '3' + side, controllerRadius=3)
+            if parent:
+                cmds.parent(fingerControls[0] + '_parent', parent + side + '_parent')
 
     def onCreateSpineControllersBtnClicked(self):
         '''
@@ -472,20 +516,20 @@ class AutoRiggerGUI(QDialog):
         self.rootGroupBox.setDisabled(True)
         self.spineGroupBox.setEnabled(True)
 
-    def onHW7ButtonClicked(self):
-        '''
-        When the HW7 button is clicked, the HW7 FK rig is shown, this is temporary.
-        '''                
-        self.updateMarkerData()
+    # def onHW7ButtonClicked(self):
+    #     '''
+    #     When the HW7 button is clicked, the HW7 FK rig is shown, this is temporary.
+    #     '''                
+    #     self.updateMarkerData()
         
-        modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
+    #     modelPanels = [panel for panel in cmds.getPanel(all=True) if cmds.getPanel(typeOf=panel) == 'modelPanel']
         
-        for panel in modelPanels:
-            cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded')
+    #     for panel in modelPanels:
+    #         cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded')
 
-        skels = Skeleton.createSkeleton(self.markerData)
-        cmds.delete(self.markers)
-        FK.createFKCharacterControllers(skels[0])        
+    #     skels = Skeleton.createSkeleton(self.markerData)
+    #     cmds.delete(self.markers)
+    #     FK.createFKCharacterControllers(skels[0])        
    
     def createSectionLayout(self, radioButtons, checkBoxes, createButton):
         '''
@@ -535,9 +579,15 @@ class AutoRiggerGUI(QDialog):
         cmds.parent(self.rootControls[0] + '_parent', parentGrp)
         cmds.parent(self.skeleton[0], parentGrp)
         
-        for side in ['_l', '_r']: # send the ik controls in the controllers group
-            cmds.parent('leg_ik' + side, self.rootControls[0] + '_parent')
-            cmds.parent('arm_ik' + side, self.rootControls[0] + '_parent')
+        for side in ['_l', '_r']: # send the ik handle in the controllers group
+            if cmds.objExists('leg_ik' + side):
+                cmds.parent('leg_ik' + side, self.rootControls[0] + '_parent')
+            if cmds.objExists('arm_ik' + side):
+                cmds.parent('arm_ik' + side, self.rootControls[0] + '_parent')
+            if cmds.objExists('leg' + side + '_ik'):
+                cmds.parent('leg' + side + '_ik', parentGrp)
+            if cmds.objExists('arm' + side + '_ik'):
+                cmds.parent('arm' + side + '_ik', parentGrp)   
     
 class Visualizer(QLabel):
     '''
@@ -697,6 +747,64 @@ class DraggableIcon(QLabel):
         When mouse is released after dragging
         '''
         self.dragging = False # stop dragging
+
+class FKIK:
+    '''
+    Creates FKIK switches and controls for the arms and legs.
+    '''
+    @staticmethod
+    def duplicateChain(jointChain, prefix):
+        '''
+        Duplicates a joint chain and adds a prefix to the new chain.
+        For the purpose of creating the FKIK switches.
+        '''
+        dupChain = []
+
+        for joint in jointChain:
+            dupJoint = cmds.duplicate(joint, po=True, n= prefix + '_' + joint)[0]
+            dupChain.append(dupJoint)
+
+        for i in range(len(dupChain)-1):
+            cmds.parent(dupChain[i+1], dupChain[i])
+
+        return dupChain       
+    
+    @staticmethod
+    def createFKIKAccessories(jointChain, prefix, controllerRadius = 20, fkParent=None, ikParent=None, ikStartParent=None, ikOffset=0):
+        '''
+        Given a joint chain, it creates the FKIK switch.
+        '''
+        fkChain = FKIK.duplicateChain(jointChain, 'fk_' + prefix)
+        ikChain = FKIK.duplicateChain(jointChain, 'ik_' + prefix)
+
+        fkCntrls = FK.createFKCharacterControllers(fkChain[0], parent=None, endJoint=fkChain[-1], controllerRadius=controllerRadius)
+        cmds.parent(fkCntrls[0] + '_parent', fkParent)
+
+        startCntrl = IK.createStartJointController(ikChain[0], ikStartParent, ikChain[ikOffset], prefix + '_start_ik', controllerRadius=controllerRadius)
+        ikHandle, effector = IK.createIKHandle(ikChain[ikOffset], ikChain[-1], prefix + '_ik')
+        ikCntrl = IK.createIKController(ikHandle, ikChain[-1], ikParent, prefix + '_ik', controllerRadius=controllerRadius)
+        pvJoint = cmds.listRelatives(ikChain[-1], parent=True)[0]
+        pvCntrl = IK.createPoleVectorConstraint(ikHandle, ikParent, pvJoint, prefix + '_pv', controllerRadius=controllerRadius)
+
+        return fkCntrls, ikCntrl, pvCntrl        
+    
+    @staticmethod
+    def createFKIKSwitch(jointChain, fkCntrls, ikCntrl, pvCntrl, switchName):
+        '''
+        Creates the FKIK switch.
+        '''
+        switchCtrl = cmds.circle(n=switchName, nr=(0,0,1), c=(0, 0, 0), r=20)[0]
+        cmds.delete(cmds.parentConstraint(jointChain[-1], switchCtrl))
+
+        cmds.addAttr(switchCtrl, ln='FKIK_Switch', at='enum', en='fk:ik:', k=True)
+
+        for fkCntrl in fkCntrls:
+            cmds.connectAttr(switchCtrl + '.FKIK_Switch', fkCntrl + '.visibility', f=True)
+        cmds.connectAttr(switchCtrl + '.FKIK_Switch', ikCntrl + '.visibility', f=True)
+        cmds.connectAttr(switchCtrl + '.FKIK_Switch', pvCntrl + '.visibility', f=True)
+
+        Helpers.lockAndHide(switchCtrl, ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'])
+        return switchCtrl
 
 class IK:
     '''
@@ -862,9 +970,7 @@ class Skeleton:
     
     @staticmethod
     def createSkeleton(markerData):
-        '''
-        Creates the skeleton from the given markers.
-        '''
+        '''Creates the skeleton from the given markers.'''
         baseMarkers = [marker[0] for marker in Markers.defaultBaseMarkers()]
         leftSideMarkers = [marker[0] for marker in Markers.defaultLeftMarkers()]
         rightSideMarkers = [marker[0] for marker in Markers.defaultRightMarkers()]
