@@ -422,9 +422,12 @@ class AutoRiggerGUI(QDialog):
         elif self.legsIkFkRadioBtn.isChecked():
             for side in ['_l', '_r']:
                 legChain = ['thigh' + side, 'knee' + side, 'foot' + side]
-                FKIK.createFKIKAccessories(legChain, 'leg' + side, controllerRadius=13, 
+
+                fkCntrks, startCntrl, ikCntrl, pvCntrl = FKIK.createFKIKAccessories(legChain, 'leg' + side, controllerRadius=13, 
                                            fkParent=self.rootControls[1], ikParent=self.rootControls[0] + '_parent', 
                                            ikStartParent= self.rootControls[1])
+                
+                switch = FKIK.createFKIKSwitch(legChain, fkCntrks, startCntrl, ikCntrl, pvCntrl, 'leg' + side + '_switch')
 
             # self.creatFootControllers('ball')
 
@@ -456,9 +459,12 @@ class AutoRiggerGUI(QDialog):
         elif self.armsIkFkRadioBtn.isChecked(): # IK/FK
             for side in ['_l', '_r']:
                 armChain = ['clavicle' + side, 'upperArm' + side, 'lowerArm' + side, 'hand' + side]
-                FKIK.createFKIKAccessories(armChain, 'arm' + side, controllerRadius=8, 
+
+                fkCntrks, startCntrl, ikCntrl, pvCntrl = FKIK.createFKIKAccessories(armChain, 'arm' + side, controllerRadius=8, 
                                            fkParent=self.spineControls[-1], ikParent=self.rootControls[0] + '_parent', 
                                            ikStartParent= self.spineControls[-1], ikOffset=1)
+                
+                switch = FKIK.createFKIKSwitch(armChain, fkCntrks, startCntrl, ikCntrl, pvCntrl, 'arm' + side + '_switch')
 
             # self.createFingerControllers('thumb')
             # self.createFingerControllers('index')
@@ -588,6 +594,10 @@ class AutoRiggerGUI(QDialog):
                 cmds.parent('leg' + side + '_ik', parentGrp)
             if cmds.objExists('arm' + side + '_ik'):
                 cmds.parent('arm' + side + '_ik', parentGrp)   
+            if cmds.objExists('leg'+ side + '_switch'):
+                cmds.parent('leg' + side + '_switch', parentGrp)
+            if cmds.objExists('arm'+ side + '_switch'):
+                cmds.parent('arm' + side + '_switch', parentGrp)
     
 class Visualizer(QLabel):
     '''
@@ -786,24 +796,36 @@ class FKIK:
         pvJoint = cmds.listRelatives(ikChain[-1], parent=True)[0]
         pvCntrl = IK.createPoleVectorConstraint(ikHandle, ikParent, pvJoint, prefix + '_pv', controllerRadius=controllerRadius)
 
-        return fkCntrls, ikCntrl, pvCntrl        
+        return fkCntrls, startCntrl, ikCntrl, pvCntrl        
     
     @staticmethod
-    def createFKIKSwitch(jointChain, fkCntrls, ikCntrl, pvCntrl, switchName):
+    def createFKIKSwitch(jointChain, fkCntrls, startCntrl, ikCntrl, pvCntrl, switchName):
         '''
         Creates the FKIK switch.
         '''
-        switchCtrl = cmds.circle(n=switchName, nr=(0,0,1), c=(0, 0, 0), r=20)[0]
+        switchCtrl = cmds.circle(n=switchName, nr=(0,0,1), c=(-20, 0, 0), r=5)[0]
+        switchShape = cmds.listRelatives(switchCtrl, shapes=True)[0]
+
+        cmds.setAttr(switchShape + '.overrideEnabled', 1)
+        cmds.setAttr(switchShape + '.overrideColor', 17)
+        cmds.setAttr(switchShape + '.lineWidth', 2)
+
         cmds.delete(cmds.parentConstraint(jointChain[-1], switchCtrl))
 
         cmds.addAttr(switchCtrl, ln='FKIK_Switch', at='enum', en='fk:ik:', k=True)
 
+        reverseNode = cmds.createNode('reverse', n=switchName + '_reverse')
+        cmds.connectAttr(switchCtrl + '.FKIK_Switch', reverseNode + '.inputX', f=True)
+
         for fkCntrl in fkCntrls:
-            cmds.connectAttr(switchCtrl + '.FKIK_Switch', fkCntrl + '.visibility', f=True)
+            cmds.connectAttr(reverseNode + '.outputX', fkCntrl + '.visibility')
+
+        cmds.connectAttr(switchCtrl + '.FKIK_Switch', startCntrl + '.visibility', f=True)
         cmds.connectAttr(switchCtrl + '.FKIK_Switch', ikCntrl + '.visibility', f=True)
         cmds.connectAttr(switchCtrl + '.FKIK_Switch', pvCntrl + '.visibility', f=True)
 
-        Helpers.lockAndHide(switchCtrl, ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'])
+        Helpers.lockAndHide(switchCtrl, ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'])   
+
         return switchCtrl
 
 class IK:
@@ -824,6 +846,10 @@ class IK:
         Creates a pole vector constraint between the pole vector and the IK handle.
         '''
         poleVector = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
+        poleShape = cmds.listRelatives(poleVector, shapes=True)[0]
+
+        cmds.setAttr(poleShape + '.overrideEnabled', 1)
+        cmds.setAttr(poleShape + '.overrideColor', 13)
 
         cmds.pointConstraint(joint, poleVector)
         cmds.delete(poleVector, cn=True)
@@ -839,6 +865,10 @@ class IK:
         Creates a controller for the start joint of the IK handle.
         '''
         controller = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
+        cntrlShape = cmds.listRelatives(controller, shapes=True)[0]
+
+        cmds.setAttr(cntrlShape + '.overrideEnabled', 1)
+        cmds.setAttr(cntrlShape + '.overrideColor', 13)
 
         cmds.pointConstraint(child, controller)
         cmds.delete(controller, cn=True)
@@ -858,6 +888,10 @@ class IK:
         Creates an IK control for the IK handle.
         '''
         controller = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
+        cntrlShape = cmds.listRelatives(controller, shapes=True)[0]
+
+        cmds.setAttr(cntrlShape + '.overrideEnabled', 1)
+        cmds.setAttr(cntrlShape + '.overrideColor', 13)
 
         ctrlParent = cmds.group(em=True, n='ctrl_' + name + '_parent')
         cmds.parent(controller, ctrlParent)
