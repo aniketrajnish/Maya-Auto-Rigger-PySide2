@@ -31,7 +31,7 @@ class AutoRiggerGUI(QDialog):
     def initWindow(self):
         self.setWindowTitle('Makra\'s Auto Rigger')
         screenSize = self.screen().size()
-        self.setMinimumSize(screenSize.width()//6,screenSize.height()//2)
+        self.setMinimumSize(screenSize.width()//6,screenSize.height()//1.6)
 
     def initTabs(self):
         '''
@@ -57,6 +57,7 @@ class AutoRiggerGUI(QDialog):
         self.initHeadWidgets()
         self.initArmsWidgets()
         self.initLegsWidgets()
+        self.initFKIKSnappingWidgets()
 
     def initLayout(self):
         '''
@@ -250,6 +251,7 @@ class AutoRiggerGUI(QDialog):
         cmds.delete(self.markers)
 
         self.rootGroupBox.setEnabled(True)
+        self.createSkeletonBtn.setDisabled(True)
 
     # def initHW7Widgets(self):        
     #     '''
@@ -397,6 +399,80 @@ class AutoRiggerGUI(QDialog):
         self.rootGroupBox.setDisabled(True)
 
         # self.optionsLayout.addWidget(self.rootGroupBox)
+    
+    def initFKIKSnappingWidgets(self):
+        '''
+        Initializes the widgets required for the FKIK snapping.
+        Gets enabled after cleanup.
+        '''
+        self.fkIkSnappingGroupBox = QGroupBox('FK/IK Snapping')
+        self.fkIkSnappingLayout = QVBoxLayout()
+
+        self.fkikRadioBtn = QRadioButton('FK-IK')
+        self.ikfkRadioBtn = QRadioButton('IK-FK')
+        self.fkikRadioBtn.setChecked(True)
+
+        self.snapOrderLayout = QHBoxLayout()
+        self.snapOrderLayout.addWidget(self.fkikRadioBtn)
+        self.snapOrderLayout.addWidget(self.ikfkRadioBtn)
+        self.fkIkSnappingLayout.addLayout(self.snapOrderLayout)
+
+        self.armsLayout = QHBoxLayout()
+        self.lArmBtn = QPushButton('Left Arm')
+        self.rArmBtn = QPushButton('Right Arm')
+        self.armsLayout.addWidget(self.lArmBtn)
+        self.armsLayout.addWidget(self.rArmBtn)
+        self.lArmBtn.clicked.connect(lambda: self.snapArmFKIK('_l'))
+        self.rArmBtn.clicked.connect(lambda: self.snapArmFKIK('_r'))
+
+        self.legsLayout = QHBoxLayout()
+        self.lLegBtn = QPushButton('Left Leg')
+        self.rLegBtn = QPushButton('Right Leg')
+        self.legsLayout.addWidget(self.lLegBtn)
+        self.legsLayout.addWidget(self.rLegBtn)
+        self.lLegBtn.clicked.connect(lambda: self.snapLegFKIK('_l'))
+        self.rLegBtn.clicked.connect(lambda: self.snapLegFKIK('_r'))
+
+        self.fkIkSnappingLayout.addLayout(self.armsLayout)
+        self.fkIkSnappingLayout.addLayout(self.legsLayout)
+
+        self.fkIkSnappingGroupBox.setLayout(self.fkIkSnappingLayout)
+        self.jointsTabLayout.addWidget(self.fkIkSnappingGroupBox)
+
+        self.fkIkSnappingGroupBox.setDisabled(True)
+        
+        self.isLegFKIK = False
+        self.isArmFKIK = False
+
+    def snapArmFKIK(self, side):
+        '''
+        Calls the snap methods for the arms.
+        '''
+        fkCntrls = self.armFkCntrls[side] 
+        ikJoints = self.armIkChains[side]
+        ikCntrls = [self.armStartCntrls[side], self.armIkCntrls[side]]
+        ikHandle = self.armIkCntrls[side] 
+        ikPv = self.armPvCntrls[side]
+    
+        if self.fkikRadioBtn.isChecked():
+            FKIK.snapFKtoIK(fkCntrls, ikJoints)
+        else:
+            FKIK.snapIKtoFK(fkCntrls, ikCntrls, ikHandle, ikPv)
+
+    def snapLegFKIK(self, side):
+        '''
+        Calls the snap methods for the legs.
+        '''
+        fkCntrls = self.legFkCntrls[side]
+        ikJoints = self.legIkChains[side]
+        ikCntrls = [self.legStartCntrls[side], self.legStartCntrls[side]]
+        ikHandle = self.legIkCntrls[side] 
+        ikPv = self.legPvCntrls[side]
+        
+        if self.fkikRadioBtn.isChecked():
+            FKIK.snapFKtoIK(fkCntrls, ikJoints)
+        else:
+            FKIK.snapIKtoFK(fkCntrls, ikCntrls, ikHandle, ikPv)
 
     def onCreateLegsControllersBtnClicked(self):
         '''
@@ -420,14 +496,34 @@ class AutoRiggerGUI(QDialog):
 
 
         elif self.legsIkFkRadioBtn.isChecked():
-            for side in ['_l', '_r']:
-                legChain = ['thigh' + side, 'knee' + side, 'foot' + side]
-
-                fkCntrks, startCntrl, ikCntrl, pvCntrl = FKIK.createFKIKAccessories(legChain, 'leg' + side, controllerRadius=13, 
-                                           fkParent=self.rootControls[1], ikParent=self.rootControls[0] + '_parent', 
-                                           ikStartParent= self.rootControls[1])
-                
-                switch = FKIK.createFKIKSwitch(legChain, fkCntrks, startCntrl, ikCntrl, pvCntrl, 'leg' + side + '_switch')
+            self.legChains = {} # using dict to separate the sides (_l, _r)
+            self.legFkChains = {}
+            self.legIkChains = {}
+            self.legFkCntrls = {}
+            self.legStartCntrls = {}
+            self.legIkCntrls = {}
+            self.legPvCntrls = {}
+            self.legSwitches = {}
+            
+            if self.legsIkFkRadioBtn.isChecked():
+                for side in ['_l', '_r']:
+                    self.legChains[side] = ['thigh' + side, 'knee' + side, 'foot' + side]
+                    
+                    (self.legFkChains[side], 
+                    self.legIkChains[side], 
+                    self.legFkCntrls[side], 
+                    self.legStartCntrls[side], 
+                    self.legIkCntrls[side], 
+                    self.legPvCntrls[side]) = FKIK.createFKIKAccessories(self.legChains[side], 'leg' + side, 
+                                                                    controllerRadius=13, fkParent=self.rootControls[1], 
+                                                                    ikParent=self.rootControls[0] + '_parent', 
+                                                                    ikStartParent=self.rootControls[1])
+                                                                        
+                    self.legSwitches[side] = FKIK.createFKIKSwitch(self.legFkChains[side], self.legIkChains[side], 
+                                                                self.legChains[side], self.legFkCntrls[side], 
+                                                                self.legStartCntrls[side], self.legIkCntrls[side], 
+                                                                self.legPvCntrls[side], 'leg' + side + '_switch')
+                self.isLegFKIK = True
 
             # self.creatFootControllers('ball')
 
@@ -450,21 +546,42 @@ class AutoRiggerGUI(QDialog):
                 IK.createStartJointController('clavicle' + side, self.spineControls[-1], 'upperArm' + side, name = 'clavicle' + side, controllerRadius=12)
                 handle, effector = IK.createIKHandle('upperArm' + side, 'hand' + side,'arm_ik' + side)
                 self.ikControl = IK.createIKController(handle,'hand' + side, self.rootControls[0] + '_parent', name = 'arm' + side, controllerRadius=8)
-                IK.createPoleVectorConstraint(handle, self.rootControls[0] + '_parent', 'lowerArm' + side, name = 'pv_arm_' + side, controllerRadius=8)
+                IK.createPoleVectorConstraint(handle, self.rootControls[0] + '_parent', 'lowerArm' + side, name = 'pv_arm_' + side, controllerRadius=8)            
                 
-            # self.createFingerControllers('thumb', 'ctrl_arm')
+            # self.createFingerControllers('thumb', 'ctrl_arm') # spent so much time trying to get fingers to work only to know that it's not required
             # self.createFingerControllers('index', 'ctrl_arm')
             # self.createFingerControllers('middle', 'ctrl_arm')
 
         elif self.armsIkFkRadioBtn.isChecked(): # IK/FK
+            self.armChains = {} # using dict to separate the sides (_l, _r)
+            self.armFkChains = {}
+            self.armIkChains = {}
+            self.armFkCntrls = {}
+            self.armStartCntrls = {}
+            self.armIkCntrls = {}
+            self.armPvCntrls = {}
+            self.armSwitches = {}
+            
             for side in ['_l', '_r']:
-                armChain = ['clavicle' + side, 'upperArm' + side, 'lowerArm' + side, 'hand' + side]
-
-                fkCntrks, startCntrl, ikCntrl, pvCntrl = FKIK.createFKIKAccessories(armChain, 'arm' + side, controllerRadius=8, 
-                                           fkParent=self.spineControls[-1], ikParent=self.rootControls[0] + '_parent', 
-                                           ikStartParent= self.spineControls[-1], ikOffset=1)
+                self.armChains[side] = ['clavicle' + side, 'upperArm' + side, 'lowerArm' + side, 'hand' + side]
                 
-                switch = FKIK.createFKIKSwitch(armChain, fkCntrks, startCntrl, ikCntrl, pvCntrl, 'arm' + side + '_switch')
+                (self.armFkChains[side], 
+                self.armIkChains[side], 
+                self.armFkCntrls[side], 
+                self.armStartCntrls[side], 
+                self.armIkCntrls[side], 
+                self.armPvCntrls[side]) = FKIK.createFKIKAccessories(self.armChains[side], 'arm' + side, 
+                                                                    controllerRadius=8, 
+                                                                    fkParent=self.spineControls[-1], 
+                                                                    ikParent=self.rootControls[0] + '_parent', 
+                                                                    ikStartParent=self.spineControls[-1], 
+                                                                    ikOffset=1)
+                                                                    
+                self.armSwitches[side] = FKIK.createFKIKSwitch(self.armFkChains[side], self.armIkChains[side], 
+                                                            self.armChains[side], self.armFkCntrls[side], 
+                                                            self.armStartCntrls[side], self.armIkCntrls[side], 
+                                                            self.armPvCntrls[side], 'arm' + side + '_switch')
+            self.isArmFKIK = True
 
             # self.createFingerControllers('thumb')
             # self.createFingerControllers('index')
@@ -598,6 +715,18 @@ class AutoRiggerGUI(QDialog):
                 cmds.parent('leg' + side + '_switch', parentGrp)
             if cmds.objExists('arm'+ side + '_switch'):
                 cmds.parent('arm' + side + '_switch', parentGrp)
+
+        if self.isLegFKIK or self.isArmFKIK: # selectively enable the fkik snapping group box based on the rig created                 
+            self.fkIkSnappingGroupBox.setEnabled(True)
+
+            if self.isLegFKIK is False:
+                self.lLegBtn.setDisabled(True)
+                self.rLegBtn.setDisabled(True)
+                
+            if self.isArmFKIK is False:
+                self.lArmBtn.setDisabled(True)
+                self.rArmBtn.setDisabled(True)
+        
     
 class Visualizer(QLabel):
     '''
@@ -760,7 +889,7 @@ class DraggableIcon(QLabel):
 
 class FKIK:
     '''
-    Creates FKIK switches and controls for the arms and legs.
+    Creates FKIK switchs and controls for the arms and legs.
     '''
     @staticmethod
     def duplicateChain(jointChain, prefix):
@@ -796,29 +925,33 @@ class FKIK:
         pvJoint = cmds.listRelatives(ikChain[-1], parent=True)[0]
         pvCntrl = IK.createPoleVectorConstraint(ikHandle, ikParent, pvJoint, prefix + '_pv', controllerRadius=controllerRadius)
 
-        return fkCntrls, startCntrl, ikCntrl, pvCntrl        
+        return fkChain, ikChain, fkCntrls, startCntrl, ikCntrl, pvCntrl # keeping track of the controls and chains     
     
     @staticmethod
-    def createFKIKSwitch(jointChain, fkCntrls, startCntrl, ikCntrl, pvCntrl, switchName):
+    def createFKIKSwitch(fkChain, ikChain, bindChain, fkCntrls, startCntrl, ikCntrl, pvCntrl, switchName):
         '''
         Creates the FKIK switch.
         '''
         switchCtrl = cmds.circle(n=switchName, nr=(0,0,1), c=(-20, 0, 0), r=5)[0]
-        switchShape = cmds.listRelatives(switchCtrl, shapes=True)[0]
+        Helpers.changeControllerProperites(switchCtrl, color=17, width=2) # give it a distinct look
 
-        cmds.setAttr(switchShape + '.overrideEnabled', 1)
-        cmds.setAttr(switchShape + '.overrideColor', 17)
-        cmds.setAttr(switchShape + '.lineWidth', 2)
+        cmds.delete(cmds.parentConstraint(bindChain[-1], switchCtrl))
 
-        cmds.delete(cmds.parentConstraint(jointChain[-1], switchCtrl))
+        cmds.addAttr(switchCtrl, ln='FKIK_Switch', at='enum', en='fk:ik:', k=True) # using enums instead of bools :)
 
-        cmds.addAttr(switchCtrl, ln='FKIK_Switch', at='enum', en='fk:ik:', k=True)
+        for fk, ik, b in zip(fkChain, ikChain, bindChain):
+            oc = cmds.orientConstraint(fk, ik, b, mo=True)[0]
 
-        reverseNode = cmds.createNode('reverse', n=switchName + '_reverse')
-        cmds.connectAttr(switchCtrl + '.FKIK_Switch', reverseNode + '.inputX', f=True)
+            cmds.connectAttr(switchCtrl + '.FKIK_Switch', oc + '.w1')
+            reverseNode = cmds.shadingNode('reverse', asUtility=True, n='reverse_' + b) # to get the opposite of the switch i.e fk
+            cmds.connectAttr(switchCtrl + '.FKIK_Switch', reverseNode + '.inputX')
+            cmds.connectAttr(reverseNode + '.outputX', oc + '.w0')
+
+        reverseVis =  cmds.shadingNode('reverse', asUtility=True, n=switchName + '_reverseVis') # again to get the opposite of the switch i.e fk
+        cmds.connectAttr(switchCtrl + '.FKIK_Switch', reverseVis + '.inputX')
 
         for fkCntrl in fkCntrls:
-            cmds.connectAttr(reverseNode + '.outputX', fkCntrl + '.visibility')
+            cmds.connectAttr(reverseVis + '.outputX', fkCntrl + '.visibility')
 
         cmds.connectAttr(switchCtrl + '.FKIK_Switch', startCntrl + '.visibility', f=True)
         cmds.connectAttr(switchCtrl + '.FKIK_Switch', ikCntrl + '.visibility', f=True)
@@ -827,6 +960,33 @@ class FKIK:
         Helpers.lockAndHide(switchCtrl, ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'])   
 
         return switchCtrl
+    
+    @staticmethod
+    def snapFKtoIK(fkControls, ikJoints):
+        '''
+        Snaps FK controls to match the pose of IK controls.
+        '''
+        for fk, ik in zip(fkControls, ikJoints): # match the pose of the fk controls to the ik joints
+            for attr in['rx', 'ry', 'rz']:
+                curr = cmds.getAttr(ik + '.' + attr)
+                cmds.setAttr(fk + '.' + attr, curr)
+
+    @staticmethod
+    def snapIKtoFK(fkControls, ikControls, ikHandle, ikPv):
+        '''
+        Snaps IK controls to match the pose of FK controls.
+        '''
+        cmds.matchTransform(ikHandle, fkControls[-1], pos=True, rot=True)
+
+        initPos = cmds.xform(fkControls[0], q=True, ws=True, t=True) # start of the fk chain
+        midPos = cmds.xform(fkControls[1], q=True, ws=True, t=True) # mid of the fk chain (assuming 3 joints in the fk chain) (elbow or knee)
+        finPos = cmds.xform(fkControls[-1], q=True, ws=True, t=True) # end of the fk chain
+        meanPos = [(initPos[i] + finPos[i]) / 2 for i in range(3)] 
+        
+        dir = [midPos[i] - meanPos[i] for i in range(3)] # direction vector from the mid point to the mid joint
+        pvPos = [midPos[i] + dir[i] * 2 for i in range(3)] # pole vector position (2x because it's a bit far from the mid joint)
+
+        cmds.move(pvPos[0], pvPos[1], pvPos[2], ikPv)
 
 class IK:
     '''
@@ -846,10 +1006,7 @@ class IK:
         Creates a pole vector constraint between the pole vector and the IK handle.
         '''
         poleVector = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
-        poleShape = cmds.listRelatives(poleVector, shapes=True)[0]
-
-        cmds.setAttr(poleShape + '.overrideEnabled', 1)
-        cmds.setAttr(poleShape + '.overrideColor', 13)
+        Helpers.changeControllerProperites(poleVector, color=13)
 
         cmds.pointConstraint(joint, poleVector)
         cmds.delete(poleVector, cn=True)
@@ -865,10 +1022,7 @@ class IK:
         Creates a controller for the start joint of the IK handle.
         '''
         controller = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
-        cntrlShape = cmds.listRelatives(controller, shapes=True)[0]
-
-        cmds.setAttr(cntrlShape + '.overrideEnabled', 1)
-        cmds.setAttr(cntrlShape + '.overrideColor', 13)
+        Helpers.changeControllerProperites(controller, color=13)
 
         cmds.pointConstraint(child, controller)
         cmds.delete(controller, cn=True)
@@ -888,10 +1042,7 @@ class IK:
         Creates an IK control for the IK handle.
         '''
         controller = cmds.circle(n='ctrl_' + name, nr=(1, 0, 0), c=(0, 0, 0), r=controllerRadius)[0]
-        cntrlShape = cmds.listRelatives(controller, shapes=True)[0]
-
-        cmds.setAttr(cntrlShape + '.overrideEnabled', 1)
-        cmds.setAttr(cntrlShape + '.overrideColor', 13)
+        Helpers.changeControllerProperites(controller, color=13)
 
         ctrlParent = cmds.group(em=True, n='ctrl_' + name + '_parent')
         cmds.parent(controller, ctrlParent)
@@ -1108,6 +1259,19 @@ class Helpers:
         '''
         for attr in attributes:
             cmds.setAttr(node + '.' + attr, l = False, k = True, cb = True)
+
+    @staticmethod
+    def changeControllerProperites(controller, color = None, width = None):
+        '''
+        Changes the properties of the given controller.
+        '''
+        controllerShape = cmds.listRelatives(controller, shapes=True)[0]
+        cmds.setAttr(controllerShape + '.overrideEnabled', 1)
+        
+        if color:
+            cmds.setAttr(controllerShape + '.overrideColor', color)
+        if width:
+            cmds.setAttr(controllerShape + '.lineWidth', width)
 
 arGUI = AutoRiggerGUI() # Create an instance of the AutoRiggerGUI class and show it
 arGUI.show()
