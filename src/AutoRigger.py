@@ -1,6 +1,5 @@
 '''
-Click on IK button to create IK handles and controllers for the legs and arms.
-Legs one is most likely incorrect, but the arms one is similar to class example.
+Implemented two advanced features: Spline Spine and Uniform Scaling
 '''
 
 from PySide2.QtWidgets import *
@@ -121,6 +120,9 @@ class AutoRiggerGUI(QDialog):
         self.fullBodyRadioButton = QRadioButton('Full-Body')
         self.halfBodyRadioButton.setChecked(True)
 
+        self.splineSpineCheckbox = QCheckBox('Spline Spine') # keep spline spine option in the markers tab so that we can control the joint placement
+        self.splineSpineCheckbox.setChecked(True)
+
         self.createMarkersBtn = QPushButton('Create Markers')
         self.createMarkersBtn.clicked.connect(self.onCreateMarkersBtnClicked)
 
@@ -129,6 +131,7 @@ class AutoRiggerGUI(QDialog):
 
         self.createMarkersLayout.addWidget(self.halfBodyRadioButton)
         self.createMarkersLayout.addWidget(self.fullBodyRadioButton)
+        self.createMarkersLayout.addWidget(self.splineSpineCheckbox)
        
         self.createMarkersLayout.addWidget(self.createMarkersBtn)
         self.createMarkersGroupBox.setLayout(self.createMarkersLayout)
@@ -190,12 +193,20 @@ class AutoRiggerGUI(QDialog):
             cmds.modelEditor(panel, edit=True, displayAppearance='wireframe') # change the display of the model panel to wireframe to make it easier to see the markers
 
         self.editMarkersGroupBox.setEnabled(True)
-        self.createMarkersGroupBox.setDisabled(True)        
+        self.createMarkersGroupBox.setDisabled(True)       
 
-        if self.halfBodyRadioButton.isChecked():
-            markers = Markers.defaultBaseMarkers() + Markers.defaultLeftMarkers()
+        markers = Markers.defaultLeftMarkers() 
+
+        self.splineSpine = False
+
+        if self.splineSpineCheckbox.isChecked():
+            markers += Markers.defaultSplineBaseMarkers()        
+            self.splineSpine = True
         else:
-            markers = Markers.defaultBaseMarkers() + Markers.defaultLeftMarkers() + Markers.defaultRightMarkers()
+            markers += Markers.defaultBaseMarkers()
+
+        if self.fullBodyRadioButton.isChecked():
+            markers += Markers.defaultRightMarkers()
             self.mirrorMarkersBtn.setEnabled(False)
             self.tabs.setTabEnabled(1, True)
 
@@ -247,7 +258,7 @@ class AutoRiggerGUI(QDialog):
         for panel in modelPanels:
             cmds.modelEditor(panel, edit=True, displayAppearance='smoothShaded') # change the display of the model panel back to smooth shaded
 
-        self.skeleton = Skeleton.createSkeleton(self.markerData)
+        self.skeleton = Skeleton.createSkeleton(self.markerData, self.splineSpine)
         cmds.delete(self.markers)
 
         self.rootGroupBox.setEnabled(True)
@@ -336,7 +347,6 @@ class AutoRiggerGUI(QDialog):
         '''
         self.spineSpaceSwitchingCheckbox = QCheckBox('Space Switching')
         self.spineStretchyCheckbox = QCheckBox('Stretchy')
-        self.splineSpineCheckbox = QCheckBox('Spline Spine')
 
         self.createSpineJointsBtn = QPushButton('Create Controllers')
         self.createSpineJointsBtn.clicked.connect(self.onCreateSpineControllersBtnClicked)
@@ -345,7 +355,7 @@ class AutoRiggerGUI(QDialog):
 
         self.spineGroupBox.setLayout(self.createSectionLayout(
             [],
-            [self.spineSpaceSwitchingCheckbox, self.spineStretchyCheckbox, self.splineSpineCheckbox],
+            [self.spineSpaceSwitchingCheckbox, self.spineStretchyCheckbox],
             self.createSpineJointsBtn
         ))
 
@@ -384,6 +394,8 @@ class AutoRiggerGUI(QDialog):
         self.rootSpaceSwitchingCheckbox = QCheckBox('Space Switching')
         self.rootStretchyCheckbox = QCheckBox('Stretchy')
         self.rootUniformScaleCheckbox = QCheckBox('Uniform Scale')
+
+        self.rootUniformScaleCheckbox.setChecked(True)
 
         self.createRootJointsBtn = QPushButton('Create Controllers')
         self.createRootJointsBtn.clicked.connect(self.onCreateRootControllersBtnClicked)
@@ -613,9 +625,12 @@ class AutoRiggerGUI(QDialog):
         '''
         When the create spine controllers button is clicked, the spine controllers are created.
         '''
-        self.spineControls = FK.createFKCharacterControllers(rootJoint='spine1', endJoint='spine3')
-
-        cmds.parent(self.spineControls[0] + '_parent', self.rootControls[-1])
+        if self.splineSpine:
+            self.spineControls = IK.createSplineSpineIK('spine1', 'spine4', 'spine9', name = 'spine_ik')
+            cmds.parent(self.spineControls[-1], self.rootControls[-1])
+        else: 
+            self.spineControls = FK.createFKCharacterControllers(rootJoint='spine1', endJoint='spine3')
+            cmds.parent(self.spineControls[0] + '_parent', self.rootControls[-1])                 
 
         self.spineGroupBox.setDisabled(True)
         self.headGroupBox.setEnabled(True)
@@ -637,7 +652,7 @@ class AutoRiggerGUI(QDialog):
         '''
         self.rootControls = FK.createFKCharacterControllers(rootJoint='root', endJoint='pelvis')
 
-        cmds.delete('root_parentConstraint1', 'pelvis_parentConstraint1')
+        cmds.delete('root_parentConstraint1', 'pelvis_parentConstraint1') # remove 90 degree rotation on ctrl_root_parent
         cmds.makeIdentity(self.rootControls[0] + '_parent', apply=True, t=1, r=1, s=1, n=0, pn=1)
         cmds.parentConstraint('ctrl_root', 'root', mo=True, name='root_parentConstraint1')
         cmds.parentConstraint('ctrl_pelvis', 'pelvis', mo=True, name='pelvis_parentConstraint1')
@@ -652,14 +667,15 @@ class AutoRiggerGUI(QDialog):
 
     def createUnifromScaling(self, rootCntrl, parentGrp):
         '''
-        Creates the uniform scaling for the root joint.
+        Scale the rig uniformly if we scale the root control.
         '''
         parentKids = cmds.listRelatives(parentGrp, children=True)
         parentKids.remove(rootCntrl + '_parent')
 
-        for kid in parentKids:
+        for kid in parentKids: # Move everything under the root control to allow for uniform scaling
             print(kid)
             cmds.parent(kid, rootCntrl)
+            
         rootCntrlKids = cmds.listRelatives(rootCntrl + '_parent', children=True)
         rootCntrlKids.remove(rootCntrl)
 
@@ -726,7 +742,6 @@ class AutoRiggerGUI(QDialog):
         '''
         Organizes the rig in the outliner.
         '''   
-
         parentGrp = cmds.group(em=True, n='rig')
         cmds.parent(self.rootControls[0] + '_parent', parentGrp)
         cmds.parent(self.skeleton[0], parentGrp)      
@@ -745,7 +760,7 @@ class AutoRiggerGUI(QDialog):
             if cmds.objExists('arm'+ side + '_switch'):
                 cmds.parent('arm' + side + '_switch', parentGrp)
 
-        if self.scaleUniform:
+        if self.scaleUniform: # send everything under the root control to allow for uniform scaling
             self.createUnifromScaling(self.rootControls[0], parentGrp)
 
         # cmds.scaleConstraint(self.rootControls[0], parentGrp, maintainOffset=True) #uniform scaling
@@ -1093,6 +1108,44 @@ class IK:
         cmds.parent(ctrlParent, parent)
 
         return controller
+    
+    @staticmethod
+    def createSplineSpineIK(startJ, middleJ, endJ, name = 'spineIK'):
+        '''
+        Creates a spline IK for the spine.
+        '''
+        handle = cmds.ikHandle(n=name, sj=startJ, ee=endJ, sol='ikSplineSolver', ccv=True, pcv=False)
+        handleCurve = cmds.rename(handle[2], name + '_curve')
+        endEffector = cmds.rename(handle[1], name + '_effector')
+
+        cmds.select(handleCurve + '.cv[0:1]', r=True)
+        lowerCluster = cmds.cluster(n=name + '_lowerCluster')[1]
+        cmds.select(handleCurve + '.cv[2:3]', r=True)
+        upperCluster = cmds.cluster(n=name + '_upperCluster')[1]
+
+        lowerCtrl = Helpers.makeCircleControls(startJ, name + '_lowerCtrl', 20) 
+        upperCtrl = Helpers.makeCircleControls(endJ, name + '_upperCtrl', 20)
+        bodyCtrl = Helpers.makeCircleControls(startJ, name + '_bodyCtrl', 25)
+        middleCtrl = Helpers.makeCircleControls(middleJ, name + '_middleCtrl', 20)
+
+        # for ctrl, cluster in zip([lowerCtrl, upperCtrl], [lowerCluster, upperCluster]):
+        #     cmds.pointConstraint(cluster, ctrl, mo=False)
+        #     cmds.delete(ctrl, cn=True)
+        
+        cmds.parent(upperCluster, upperCtrl)
+        cmds.parent(lowerCluster, lowerCtrl)
+        cmds.parent(lowerCtrl, bodyCtrl)
+        cmds.parent(upperCtrl, middleCtrl)
+        cmds.parent(middleCtrl, bodyCtrl)
+
+        cmds.parentConstraint(lowerCtrl, startJ, mo=True)
+        cmds.parentConstraint(upperCtrl, endJ, mo=True)
+
+        splineGrp = cmds.group(handle[0], handleCurve, n=name + '_grp')
+        cmds.parent(bodyCtrl, splineGrp)
+        cmds.connectAttr(upperCtrl + '.rotateY', handle[0] + '.twist')
+
+        return bodyCtrl, middleCtrl, lowerCtrl, upperCtrl, splineGrp
 
 class FK:
     '''
@@ -1189,9 +1242,15 @@ class Skeleton:
         return chain
     
     @staticmethod
-    def createSkeleton(markerData):
-        '''Creates the skeleton from the given markers.'''
-        baseMarkers = [marker[0] for marker in Markers.defaultBaseMarkers()]
+    def createSkeleton(markerData, splineSpine = False):
+        '''
+        Creates the skeleton from the given markers.
+        '''
+        if splineSpine:
+            baseMarkers = [marker[0] for marker in Markers.defaultSplineBaseMarkers()]
+        else:
+            baseMarkers = [marker[0] for marker in Markers.defaultBaseMarkers()]
+
         leftSideMarkers = [marker[0] for marker in Markers.defaultLeftMarkers()]
         rightSideMarkers = [marker[0] for marker in Markers.defaultRightMarkers()]
 
@@ -1199,13 +1258,13 @@ class Skeleton:
         pelvisJ = Skeleton.createJointFromMarker('pelvis', markerData, jParent=rootJ)
         spineJs = Skeleton.createJointChainFromMarkers(baseMarkers[2:], markerData, jParent=pelvisJ)
 
-        leftArmJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[:4], markerData, jParent=spineJs[2]) # left joints
+        leftArmJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[:4], markerData, jParent=spineJs[-3]) # left joints
         leftThumbJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[4:7], markerData, jParent=leftArmJs[-1])
         leftIndexJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[7:10], markerData, jParent=leftArmJs[-1])
         leftMiddleJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[10:13], markerData, jParent=leftArmJs[-1])
         leftLegJs = Skeleton.createJointChainFromMarkers(leftSideMarkers[13:], markerData, jParent=pelvisJ)
 
-        rightArmJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[:4], markerData, jParent=spineJs[2]) # right joints
+        rightArmJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[:4], markerData, jParent=spineJs[-3]) # right joints
         rightThumbJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[4:7], markerData, jParent=rightArmJs[-1])
         rightIndexJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[7:10], markerData, jParent=rightArmJs[-1])
         rightMiddleJs = Skeleton.createJointChainFromMarkers(rightSideMarkers[10:13], markerData, jParent=rightArmJs[-1])
@@ -1254,6 +1313,19 @@ class Markers:
             rightMarkers.append((name.replace('_l', '_r'), (-x, y, z)))
 
         return rightMarkers
+    
+    @staticmethod
+    def defaultSplineBaseMarkers():
+        '''
+        Returns the base markers for the spline spine.
+        '''
+        return [
+            ('root', (0, 0, 0)), ('pelvis', (0, 105, 0)), 
+            ('spine1',(0, 111, 1.5)), ('spine2',(0, 117, 3)), ('spine3',(0, 125,5)),
+            ('spine4',(0, 129, 4)), ('spine5',(0, 133,3)), ('spine6', (0, 138, 2.5)), 
+            ('spine7',(0, 142, 0.5)),('spine8',(0, 146, -2)),('spine9', (0.0, 150, -4.5)),
+            ('neck', (0, 158.5, -3)), ('head', (0, 181.5, 1))
+        ]
     
     @staticmethod
     def createMarkers(markers):
@@ -1307,6 +1379,24 @@ class Helpers:
             cmds.setAttr(controllerShape + '.overrideColor', color)
         if width:
             cmds.setAttr(controllerShape + '.lineWidth', width)
+
+    @staticmethod
+    def makeCircleControls(joint, ctrlName, radius):
+        '''
+        Creates a circle control for the given joint.
+        '''
+        cntrl = cmds.circle(n=ctrlName, nr=(0, 0, 1), c=(0, 0, 0), r=radius)[0]
+        Helpers.changeControllerProperites(cntrl, color=13)
+
+        cmds.pointConstraint(joint, cntrl)
+        cmds.delete(cntrl, cn=True)
+
+        cmds.rotate(90, 0, 0, cntrl)
+
+        cmds.makeIdentity(cntrl, apply=True, r=True, s=True, t=True, n=False, pn=True)
+        cmds.delete(cntrl, ch=True)
+
+        return cntrl
 
 arGUI = AutoRiggerGUI() # Create an instance of the AutoRiggerGUI class and show it
 arGUI.show()
