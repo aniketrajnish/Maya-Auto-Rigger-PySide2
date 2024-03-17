@@ -336,6 +336,7 @@ class AutoRiggerGUI(QDialog):
         '''
         self.spineSpaceSwitchingCheckbox = QCheckBox('Space Switching')
         self.spineStretchyCheckbox = QCheckBox('Stretchy')
+        self.splineSpineCheckbox = QCheckBox('Spline Spine')
 
         self.createSpineJointsBtn = QPushButton('Create Controllers')
         self.createSpineJointsBtn.clicked.connect(self.onCreateSpineControllersBtnClicked)
@@ -344,7 +345,7 @@ class AutoRiggerGUI(QDialog):
 
         self.spineGroupBox.setLayout(self.createSectionLayout(
             [],
-            [self.spineSpaceSwitchingCheckbox, self.spineStretchyCheckbox],
+            [self.spineSpaceSwitchingCheckbox, self.spineStretchyCheckbox, self.splineSpineCheckbox],
             self.createSpineJointsBtn
         ))
 
@@ -457,7 +458,7 @@ class AutoRiggerGUI(QDialog):
         if self.fkikRadioBtn.isChecked():
             FKIK.snapFKtoIK(fkCntrls, ikJoints)
         else:
-            FKIK.snapIKtoFK(fkCntrls, ikCntrls, ikHandle, ikPv)
+            FKIK.snapIKtoFK(fkCntrls, ikCntrls, ikHandle, ikPv, offset= 1)
 
     def snapLegFKIK(self, side):
         '''
@@ -472,7 +473,7 @@ class AutoRiggerGUI(QDialog):
         if self.fkikRadioBtn.isChecked():
             FKIK.snapFKtoIK(fkCntrls, ikJoints)
         else:
-            FKIK.snapIKtoFK(fkCntrls, ikCntrls, ikHandle, ikPv)
+            FKIK.snapIKtoFK(fkCntrls, ikCntrls, ikHandle, ikPv, offset=0)
 
     def onCreateLegsControllersBtnClicked(self):
         '''
@@ -636,8 +637,35 @@ class AutoRiggerGUI(QDialog):
         '''
         self.rootControls = FK.createFKCharacterControllers(rootJoint='root', endJoint='pelvis')
 
+        cmds.delete('root_parentConstraint1', 'pelvis_parentConstraint1')
+        cmds.makeIdentity(self.rootControls[0] + '_parent', apply=True, t=1, r=1, s=1, n=0, pn=1)
+        cmds.parentConstraint('ctrl_root', 'root', mo=True, name='root_parentConstraint1')
+        cmds.parentConstraint('ctrl_pelvis', 'pelvis', mo=True, name='pelvis_parentConstraint1')
+
+        self.scaleUniform = False
+
+        if self.rootUniformScaleCheckbox.isChecked():
+            self.scaleUniform = True
+
         self.rootGroupBox.setDisabled(True)
         self.spineGroupBox.setEnabled(True)
+
+    def createUnifromScaling(self, rootCntrl, parentGrp):
+        '''
+        Creates the uniform scaling for the root joint.
+        '''
+        parentKids = cmds.listRelatives(parentGrp, children=True)
+        parentKids.remove(rootCntrl + '_parent')
+
+        for kid in parentKids:
+            print(kid)
+            cmds.parent(kid, rootCntrl)
+        rootCntrlKids = cmds.listRelatives(rootCntrl + '_parent', children=True)
+        rootCntrlKids.remove(rootCntrl)
+
+        for kid in rootCntrlKids:
+            print(kid)
+            cmds.parent(kid, rootCntrl)
 
     # def onHW7ButtonClicked(self):
     #     '''
@@ -697,16 +725,17 @@ class AutoRiggerGUI(QDialog):
     def cleanup(self):
         '''
         Organizes the rig in the outliner.
-        '''
+        '''   
+
         parentGrp = cmds.group(em=True, n='rig')
         cmds.parent(self.rootControls[0] + '_parent', parentGrp)
-        cmds.parent(self.skeleton[0], parentGrp)
-        
+        cmds.parent(self.skeleton[0], parentGrp)      
+
         for side in ['_l', '_r']: # send the ik handle in the controllers group
             if cmds.objExists('leg_ik' + side):
-                cmds.parent('leg_ik' + side, self.rootControls[0] + '_parent')
+                cmds.parent('leg_ik' + side, parentGrp)
             if cmds.objExists('arm_ik' + side):
-                cmds.parent('arm_ik' + side, self.rootControls[0] + '_parent')
+                cmds.parent('arm_ik' + side, parentGrp)
             if cmds.objExists('leg' + side + '_ik'):
                 cmds.parent('leg' + side + '_ik', parentGrp)
             if cmds.objExists('arm' + side + '_ik'):
@@ -715,6 +744,12 @@ class AutoRiggerGUI(QDialog):
                 cmds.parent('leg' + side + '_switch', parentGrp)
             if cmds.objExists('arm'+ side + '_switch'):
                 cmds.parent('arm' + side + '_switch', parentGrp)
+
+        if self.scaleUniform:
+            self.createUnifromScaling(self.rootControls[0], parentGrp)
+
+        # cmds.scaleConstraint(self.rootControls[0], parentGrp, maintainOffset=True) #uniform scaling
+        # cmds.setAttr(self.rootControls[0] + '.inheritsTransform', 0)
 
         if self.isLegFKIK or self.isArmFKIK: # selectively enable the fkik snapping group box based on the rig created                 
             self.fkIkSnappingGroupBox.setEnabled(True)
@@ -972,14 +1007,14 @@ class FKIK:
                 cmds.setAttr(fk + '.' + attr, curr)
 
     @staticmethod
-    def snapIKtoFK(fkControls, ikControls, ikHandle, ikPv):
+    def snapIKtoFK(fkControls, ikControls, ikHandle, ikPv, offset = 0):
         '''
         Snaps IK controls to match the pose of FK controls.
         '''
         cmds.matchTransform(ikHandle, fkControls[-1], pos=True, rot=True)
 
-        initPos = cmds.xform(fkControls[0], q=True, ws=True, t=True) # start of the fk chain
-        midPos = cmds.xform(fkControls[1], q=True, ws=True, t=True) # mid of the fk chain (assuming 3 joints in the fk chain) (elbow or knee)
+        initPos = cmds.xform(fkControls[0 + offset], q=True, ws=True, t=True) # start of the fk chain
+        midPos = cmds.xform(fkControls[1 + offset], q=True, ws=True, t=True) # mid of the fk chain (assuming 3 joints in the fk chain) (elbow or knee)
         finPos = cmds.xform(fkControls[-1], q=True, ws=True, t=True) # end of the fk chain
         meanPos = [(initPos[i] + finPos[i]) / 2 for i in range(3)] 
         
